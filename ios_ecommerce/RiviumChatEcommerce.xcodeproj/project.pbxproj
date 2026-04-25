@@ -1,0 +1,433 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 63;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		3981A52EBDCA8B2E313F8E84 /* OrderHeaderWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8104DDA21082FE560253ADB0 /* OrderHeaderWidget.swift */; };
+		45064279E2C801AC6AC6DC55 /* DemoUser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BAF722DF87304F649E63117 /* DemoUser.swift */; };
+		4C668FE1729900FD819FADD1 /* RiviumChatEcommerceApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93C478071EE0F51CF4C59288 /* RiviumChatEcommerceApp.swift */; };
+		5EB1DD044CFC9DAE9D05EB31 /* Order.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12E8863650639D878806A3E0 /* Order.swift */; };
+		66B2DBA5DB575D8BBEE60A87 /* RiviumChatUI in Frameworks */ = {isa = PBXBuildFile; productRef = 465FBBAE64AF347FC5FB12CA /* RiviumChatUI */; };
+		8EE2281A760BBA02297E9998 /* LoginScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FDB8FA2C52F7CE7AFCDFFC /* LoginScreen.swift */; };
+		A81EBD762F9CCEBA00026F93 /* RiviumPush in Frameworks */ = {isa = PBXBuildFile; productRef = A81EBD752F9CCEBA00026F93 /* RiviumPush */; };
+		A85A3C382F9CDF2900416675 /* RiviumPush in Frameworks */ = {isa = PBXBuildFile; productRef = A85A3C372F9CDF2900416675 /* RiviumPush */; };
+		C77F6EFC87E9E5F628270893 /* OrdersScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 611B63460DD024CC6870A69B /* OrdersScreen.swift */; };
+		EB31256E22B40C6C49D8A7C9 /* RiviumChat in Frameworks */ = {isa = PBXBuildFile; productRef = EDE9C3265A9C0E99E8A4CE85 /* RiviumChat */; };
+		EDA9AB94302321EF491B7F33 /* OrderChatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7E760C141B7D952E3950856 /* OrderChatScreen.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		12E8863650639D878806A3E0 /* Order.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Order.swift; sourceTree = "<group>"; };
+		2BAF722DF87304F649E63117 /* DemoUser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoUser.swift; sourceTree = "<group>"; };
+		611B63460DD024CC6870A69B /* OrdersScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrdersScreen.swift; sourceTree = "<group>"; };
+		8104DDA21082FE560253ADB0 /* OrderHeaderWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrderHeaderWidget.swift; sourceTree = "<group>"; };
+		93C478071EE0F51CF4C59288 /* RiviumChatEcommerceApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RiviumChatEcommerceApp.swift; sourceTree = "<group>"; };
+		9DBAF763C0DDC5812F8EFC3A /* RiviumChatEcommerce.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RiviumChatEcommerce.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A7E760C141B7D952E3950856 /* OrderChatScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrderChatScreen.swift; sourceTree = "<group>"; };
+		A8FCCBD32F9C1765001604CC /* RiviumChatEcommerce.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RiviumChatEcommerce.entitlements; sourceTree = "<group>"; };
+		A8FCCBD42F9C19FA001604CC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		E1FDB8FA2C52F7CE7AFCDFFC /* LoginScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginScreen.swift; sourceTree = "<group>"; };
+		F9C3A21091862B4DB582D035 /* RiviumChatUI */ = {isa = PBXFileReference; lastKnownFileType = folder; name = RiviumChatUI; path = ../RiviumChatUI; sourceTree = SOURCE_ROOT; };
+		FBE59E9EC1EBA2E87F9C94D9 /* RiviumChat */ = {isa = PBXFileReference; lastKnownFileType = folder; name = RiviumChat; path = ../RiviumChat; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		5FE59038679F952DD0257DC8 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EB31256E22B40C6C49D8A7C9 /* RiviumChat in Frameworks */,
+				A81EBD762F9CCEBA00026F93 /* RiviumPush in Frameworks */,
+				A85A3C382F9CDF2900416675 /* RiviumPush in Frameworks */,
+				66B2DBA5DB575D8BBEE60A87 /* RiviumChatUI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0D36C5390FF8193DD17AD515 /* Widgets */ = {
+			isa = PBXGroup;
+			children = (
+				8104DDA21082FE560253ADB0 /* OrderHeaderWidget.swift */,
+			);
+			path = Widgets;
+			sourceTree = "<group>";
+		};
+		1BCA57C954F55CA80207BC40 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				9DBAF763C0DDC5812F8EFC3A /* RiviumChatEcommerce.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		4797C66BD7EA17C1A01F1D19 /* Screens */ = {
+			isa = PBXGroup;
+			children = (
+				E1FDB8FA2C52F7CE7AFCDFFC /* LoginScreen.swift */,
+				A7E760C141B7D952E3950856 /* OrderChatScreen.swift */,
+				611B63460DD024CC6870A69B /* OrdersScreen.swift */,
+			);
+			path = Screens;
+			sourceTree = "<group>";
+		};
+		6EBD0DCFF211C1B95CD1B0C5 /* RiviumChatEcommerce */ = {
+			isa = PBXGroup;
+			children = (
+				A8FCCBD42F9C19FA001604CC /* Info.plist */,
+				A8FCCBD32F9C1765001604CC /* RiviumChatEcommerce.entitlements */,
+				93C478071EE0F51CF4C59288 /* RiviumChatEcommerceApp.swift */,
+				785927280D8E58993FB7100D /* Models */,
+				4797C66BD7EA17C1A01F1D19 /* Screens */,
+				0D36C5390FF8193DD17AD515 /* Widgets */,
+			);
+			path = RiviumChatEcommerce;
+			sourceTree = "<group>";
+		};
+		785927280D8E58993FB7100D /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				2BAF722DF87304F649E63117 /* DemoUser.swift */,
+				12E8863650639D878806A3E0 /* Order.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		DDAF0F5DA083FA46F5F2A22B /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				FBE59E9EC1EBA2E87F9C94D9 /* RiviumChat */,
+				F9C3A21091862B4DB582D035 /* RiviumChatUI */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		FEB2CBCA181B552F9712F1E0 = {
+			isa = PBXGroup;
+			children = (
+				6EBD0DCFF211C1B95CD1B0C5 /* RiviumChatEcommerce */,
+				DDAF0F5DA083FA46F5F2A22B /* Packages */,
+				1BCA57C954F55CA80207BC40 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		4312605872172FF197D5945D /* RiviumChatEcommerce */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 914024BECE086EB2A4BFB278 /* Build configuration list for PBXNativeTarget "RiviumChatEcommerce" */;
+			buildPhases = (
+				902B2C6B130F5F24E3BEA77A /* Sources */,
+				5FE59038679F952DD0257DC8 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RiviumChatEcommerce;
+			packageProductDependencies = (
+				EDE9C3265A9C0E99E8A4CE85 /* RiviumChat */,
+				465FBBAE64AF347FC5FB12CA /* RiviumChatUI */,
+				A81EBD752F9CCEBA00026F93 /* RiviumPush */,
+				A85A3C372F9CDF2900416675 /* RiviumPush */,
+			);
+			productName = RiviumChatEcommerce;
+			productReference = 9DBAF763C0DDC5812F8EFC3A /* RiviumChatEcommerce.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		3A474432F5A3B73A920A6061 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1500;
+			};
+			buildConfigurationList = 7A70D07334496960F72C517B /* Build configuration list for PBXProject "RiviumChatEcommerce" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = FEB2CBCA181B552F9712F1E0;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				91A8C92796147E64306800A8 /* XCLocalSwiftPackageReference "../RiviumChat" */,
+				8AFB0377481D90D501C6FE80 /* XCLocalSwiftPackageReference "../RiviumChatUI" */,
+				A85A3C362F9CDF2900416675 /* XCRemoteSwiftPackageReference "rivium-push-ios-sdk" */,
+			);
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				4312605872172FF197D5945D /* RiviumChatEcommerce */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		902B2C6B130F5F24E3BEA77A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4C668FE1729900FD819FADD1 /* RiviumChatEcommerceApp.swift in Sources */,
+				45064279E2C801AC6AC6DC55 /* DemoUser.swift in Sources */,
+				8EE2281A760BBA02297E9998 /* LoginScreen.swift in Sources */,
+				5EB1DD044CFC9DAE9D05EB31 /* Order.swift in Sources */,
+				EDA9AB94302321EF491B7F33 /* OrderChatScreen.swift in Sources */,
+				3981A52EBDCA8B2E313F8E84 /* OrderHeaderWidget.swift in Sources */,
+				C77F6EFC87E9E5F628270893 /* OrdersScreen.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		2089E4CB712094A17A721136 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		438255F85F205A728ABB2A70 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		7784181EB7668F9D979BE6A3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = RiviumChatEcommerce/RiviumChatEcommerce.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CBVW8L9SU3;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RiviumChatEcommerce/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = co.rivium.chat.ecommerce;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		FF91B03EBE9E386F9522E28D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = RiviumChatEcommerce/RiviumChatEcommerce.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CBVW8L9SU3;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RiviumChatEcommerce/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = co.rivium.chat.ecommerce;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		7A70D07334496960F72C517B /* Build configuration list for PBXProject "RiviumChatEcommerce" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				438255F85F205A728ABB2A70 /* Debug */,
+				2089E4CB712094A17A721136 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		914024BECE086EB2A4BFB278 /* Build configuration list for PBXNativeTarget "RiviumChatEcommerce" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FF91B03EBE9E386F9522E28D /* Debug */,
+				7784181EB7668F9D979BE6A3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		8AFB0377481D90D501C6FE80 /* XCLocalSwiftPackageReference "../RiviumChatUI" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../RiviumChatUI;
+		};
+		91A8C92796147E64306800A8 /* XCLocalSwiftPackageReference "../RiviumChat" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../RiviumChat;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A85A3C362F9CDF2900416675 /* XCRemoteSwiftPackageReference "rivium-push-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Rivium-co/rivium-push-ios-sdk.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.1.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		465FBBAE64AF347FC5FB12CA /* RiviumChatUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = RiviumChatUI;
+		};
+		A81EBD752F9CCEBA00026F93 /* RiviumPush */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = RiviumPush;
+		};
+		A85A3C372F9CDF2900416675 /* RiviumPush */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A85A3C362F9CDF2900416675 /* XCRemoteSwiftPackageReference "rivium-push-ios-sdk" */;
+			productName = RiviumPush;
+		};
+		EDE9C3265A9C0E99E8A4CE85 /* RiviumChat */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = RiviumChat;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 3A474432F5A3B73A920A6061 /* Project object */;
+}

@@ -1,0 +1,26 @@
+# Build
+.build/
+DerivedData/
+build/
+
+# Xcode
+*.xcuserstate
+xcuserdata/
+.swiftpm/xcode/xcuserdata/
+
+# CocoaPods
+Pods/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# SPM resolved (consumers resolve their own)
+Package.resolved
+
+# Sensitive
+*.p8
+*.env
+
+# Claude
+.claude/
