@@ -9,6 +9,80 @@ public class RealtimeService {
     private var client: CentrifugeClient?
     private var subscriptions: [String: CentrifugeSubscription] = [:]
     private var delegates: [String: CentrifugeSubscriptionDelegate] = [:]
+
+    /// Channels confirmed subscribed by the server. A channel in
+    /// `subscriptions` but missing here was created and never confirmed, and
+    /// must not be treated as usable — otherwise a rejected subscribe leaves
+    /// the room silently realtime-dead.
+    private var subscribedChannels: Set<String> = []
+
+    /// Guards the three collections above.
+    ///
+    /// Subscribe and unsubscribe hand a channel name back and forth with
+    /// Centrifuge's own registry. A screen that leaves a room and rejoins it
+    /// across a lifecycle event drives both without synchronisation, and
+    /// interleaving them leaves the registries disagreeing — which surfaces as
+    /// "Subscription to a channel already exists in client's internal registry".
+    private let channelLock = NSRecursiveLock()
+
+    /// Tears one channel down: frees Centrifuge's registry entry *and*
+    /// unsubscribes. The previous version removed the subscription from the
+    /// client without ever calling `unsubscribe()`, leaving the server to
+    /// believe the client was still subscribed.
+    private func teardownChannel(_ channel: String) {
+        channelLock.lock()
+        defer { channelLock.unlock() }
+
+        subscribedChannels.remove(channel)
+        delegates.removeValue(forKey: channel)
+        guard let sub = subscriptions.removeValue(forKey: channel) else { return }
+        client?.removeSubscription(sub)
+        sub.unsubscribe()
+    }
+
+    /// Whether a new subscription should be built for `channel`. A stale,
+    /// never-confirmed subscription is torn down first — returning early on
+    /// one is what made subscribeRoom report success on a dead channel.
+    private func shouldSubscribe(_ channel: String) -> Bool {
+        channelLock.lock()
+        defer { channelLock.unlock() }
+
+        if subscribedChannels.contains(channel) { return false }
+        if subscriptions[channel] != nil { teardownChannel(channel) }
+        return true
+    }
+
+    /// Marks a channel live. Called from the subscription delegates.
+    func markSubscribed(_ channel: String) {
+        channelLock.lock(); defer { channelLock.unlock() }
+        subscribedChannels.insert(channel)
+    }
+
+    /// Marks a channel not live, dropping it so a retry rebuilds it.
+    func markUnsubscribed(_ channel: String, removeFromClient: Bool = false) {
+        channelLock.lock(); defer { channelLock.unlock() }
+        subscribedChannels.remove(channel)
+        if removeFromClient, let sub = subscriptions.removeValue(forKey: channel) {
+            client?.removeSubscription(sub)
+            delegates.removeValue(forKey: channel)
+        }
+    }
+
+    /// Whether every channel of `roomId` is currently subscribed.
+    public func isRoomSubscribed(_ roomId: String) -> Bool {
+        channelLock.lock(); defer { channelLock.unlock() }
+        return subscribedChannels.isSuperset(of: [
+            "chat:room_\(roomId)", "presence:room_\(roomId)", "typing:room_\(roomId)"
+        ])
+    }
+
+    /// Channels of `roomId` currently subscribed.
+    public func subscribedChannelsFor(_ roomId: String) -> Set<String> {
+        channelLock.lock(); defer { channelLock.unlock() }
+        return subscribedChannels.intersection([
+            "chat:room_\(roomId)", "presence:room_\(roomId)", "typing:room_\(roomId)"
+        ])
+    }
     private var pendingRoomSubscriptions: [String] = []
     private var connectContinuation: CheckedContinuation<Void, Error>?
     private let decoder: JSONDecoder
@@ -64,7 +138,7 @@ public class RealtimeService {
         pinSubject.receive(on: DispatchQueue.main).eraseToAnyPublisher()
     }
 
-    private let errorSubject = PassthroughSubject<ConnectionErrorEvent, Never>()
+    fileprivate let errorSubject = PassthroughSubject<ConnectionErrorEvent, Never>()
     public var onConnectionError: AnyPublisher<ConnectionErrorEvent, Never> {
         errorSubject.receive(on: DispatchQueue.main).eraseToAnyPublisher()
     }
@@ -126,12 +200,28 @@ public class RealtimeService {
 
     /// Disconnect from the Centrifugo server.
     public func disconnect() {
-        subscriptions.values.forEach { $0.unsubscribe() }
+        // Free Centrifuge's registry as well as our own maps. Clearing only our
+        // maps left every channel name held by the client, so each one threw
+        // "already exists" on the next subscribe for the life of the process.
+        channelLock.lock()
+        for channel in subscriptions.keys { teardownChannel(channel) }
         subscriptions.removeAll()
         delegates.removeAll()
+        subscribedChannels.removeAll()
+        channelLock.unlock()
+
         client?.disconnect()
         client = nil
         connectionStateSubject.send(.disconnected)
+    }
+
+    /// Drops the current connection and opens a new one.
+    ///
+    /// `connect()` returns early while a client exists, leaving a host no way
+    /// to recover a socket it believes is stale after a long background.
+    public func reconnect() async throws {
+        disconnect()
+        try await connect()
     }
 
     /// Subscribe only to a room's chat channel (messages, read receipts) without presence/typing.
@@ -140,7 +230,7 @@ public class RealtimeService {
 
         do {
             let chatChannel = "chat:room_\(roomId)"
-            if subscriptions[chatChannel] == nil {
+            if shouldSubscribe(chatChannel) {
                 let chatDelegate = ChatChannelDelegate(roomId: roomId, service: self)
                 let sub = try client.newSubscription(channel: chatChannel, delegate: chatDelegate)
                 delegates[chatChannel] = chatDelegate
@@ -164,7 +254,7 @@ public class RealtimeService {
         do {
             // Chat channel (messages, read receipts, etc.) — recoverable
             let chatChannel = "chat:room_\(roomId)"
-            if subscriptions[chatChannel] == nil {
+            if shouldSubscribe(chatChannel) {
                 let chatDelegate = ChatChannelDelegate(roomId: roomId, service: self)
                 let sub = try client.newSubscription(channel: chatChannel, delegate: chatDelegate)
                 delegates[chatChannel] = chatDelegate
@@ -174,7 +264,7 @@ public class RealtimeService {
 
             // Presence channel
             let presenceChannel = "presence:room_\(roomId)"
-            if subscriptions[presenceChannel] == nil {
+            if shouldSubscribe(presenceChannel) {
                 let presenceDelegate = PresenceChannelDelegate(roomId: roomId, service: self)
                 let sub = try client.newSubscription(channel: presenceChannel, delegate: presenceDelegate)
                 delegates[presenceChannel] = presenceDelegate
@@ -184,7 +274,7 @@ public class RealtimeService {
 
             // Typing channel
             let typingChannel = "typing:room_\(roomId)"
-            if subscriptions[typingChannel] == nil {
+            if shouldSubscribe(typingChannel) {
                 let typingDelegate = TypingChannelDelegate(roomId: roomId, config: config, service: self)
                 let sub = try client.newSubscription(channel: typingChannel, delegate: typingDelegate)
                 delegates[typingChannel] = typingDelegate
@@ -203,12 +293,7 @@ public class RealtimeService {
             "presence:room_\(roomId)",
             "typing:room_\(roomId)"
         ]
-        for channel in channels {
-            if let sub = subscriptions.removeValue(forKey: channel) {
-                client?.removeSubscription(sub)
-            }
-            delegates.removeValue(forKey: channel)
-        }
+        for channel in channels { teardownChannel(channel) }
     }
 
     /// Unsubscribe only from presence and typing channels (keeps chat channel for unread updates).
@@ -217,12 +302,7 @@ public class RealtimeService {
             "presence:room_\(roomId)",
             "typing:room_\(roomId)"
         ]
-        for channel in channels {
-            if let sub = subscriptions.removeValue(forKey: channel) {
-                client?.removeSubscription(sub)
-            }
-            delegates.removeValue(forKey: channel)
-        }
+        for channel in channels { teardownChannel(channel) }
     }
 
     /// Gets currently online users in a room.
@@ -458,6 +538,7 @@ private class ChatChannelDelegate: CentrifugeSubscriptionDelegate {
     }
 
     func onSubscribed(_ sub: CentrifugeSubscription, _ event: CentrifugeSubscribedEvent) {
+        service?.markSubscribed(channel)
         DispatchQueue.main.async { self.service?.subscriptionStateSubject.send(SubscriptionStateEvent(roomId: self.roomId, channel: self.channel, status: .subscribed)) }
 
         // Check for recovery failure
@@ -467,6 +548,7 @@ private class ChatChannelDelegate: CentrifugeSubscriptionDelegate {
     }
 
     func onUnsubscribed(_ sub: CentrifugeSubscription, _ event: CentrifugeUnsubscribedEvent) {
+        service?.markUnsubscribed(channel)
         DispatchQueue.main.async {
             self.service?.subscriptionStateSubject.send(SubscriptionStateEvent(
                 roomId: self.roomId,
@@ -479,12 +561,18 @@ private class ChatChannelDelegate: CentrifugeSubscriptionDelegate {
     }
 
     func onError(_ sub: CentrifugeSubscription, _ event: CentrifugeSubscriptionErrorEvent) {
+        // Drop the dead subscription so the next subscribe builds a fresh one
+        // instead of short-circuiting on a stale entry.
+        service?.markUnsubscribed(channel, removeFromClient: true)
         DispatchQueue.main.async {
             self.service?.subscriptionStateSubject.send(SubscriptionStateEvent(
                 roomId: self.roomId,
                 channel: self.channel,
-                status: .unsubscribed,
+                status: .error,
                 reason: event.error.localizedDescription
+            ))
+            self.service?.errorSubject.send(ConnectionErrorEvent(
+                error: "Subscription failed on \(self.channel): \(event.error.localizedDescription)"
             ))
             self.service?.recoveryFailedSubject.send(self.roomId)
         }
@@ -513,11 +601,31 @@ private class TypingChannelDelegate: CentrifugeSubscriptionDelegate {
     }
 
     func onSubscribed(_ sub: CentrifugeSubscription, _ event: CentrifugeSubscribedEvent) {
+        service?.markSubscribed(channel)
         DispatchQueue.main.async { self.service?.subscriptionStateSubject.send(SubscriptionStateEvent(roomId: self.roomId, channel: self.channel, status: .subscribed)) }
     }
 
     func onUnsubscribed(_ sub: CentrifugeSubscription, _ event: CentrifugeUnsubscribedEvent) {
+        service?.markUnsubscribed(channel)
         DispatchQueue.main.async { self.service?.subscriptionStateSubject.send(SubscriptionStateEvent(roomId: self.roomId, channel: self.channel, status: .unsubscribed)) }
+    }
+
+    // Without this a rejected subscribe was invisible: the channel never went
+    // live, nothing was raised, and the room looked fine while presence or
+    // typing silently never arrived.
+    func onError(_ sub: CentrifugeSubscription, _ event: CentrifugeSubscriptionErrorEvent) {
+        service?.markUnsubscribed(channel, removeFromClient: true)
+        DispatchQueue.main.async {
+            self.service?.subscriptionStateSubject.send(SubscriptionStateEvent(
+                roomId: self.roomId,
+                channel: self.channel,
+                status: .error,
+                reason: event.error.localizedDescription
+            ))
+            self.service?.errorSubject.send(ConnectionErrorEvent(
+                error: "Subscription failed on \(self.channel): \(event.error.localizedDescription)"
+            ))
+        }
     }
 
     func onPublication(_ sub: CentrifugeSubscription, _ event: CentrifugePublicationEvent) {
@@ -541,6 +649,7 @@ private class PresenceChannelDelegate: CentrifugeSubscriptionDelegate {
     }
 
     func onSubscribed(_ sub: CentrifugeSubscription, _ event: CentrifugeSubscribedEvent) {
+        service?.markSubscribed(channel)
         DispatchQueue.main.async { self.service?.subscriptionStateSubject.send(SubscriptionStateEvent(roomId: self.roomId, channel: self.channel, status: .subscribed)) }
 
         // Query current presence and emit events for all online users.
@@ -558,7 +667,26 @@ private class PresenceChannelDelegate: CentrifugeSubscriptionDelegate {
     }
 
     func onUnsubscribed(_ sub: CentrifugeSubscription, _ event: CentrifugeUnsubscribedEvent) {
+        service?.markUnsubscribed(channel)
         DispatchQueue.main.async { self.service?.subscriptionStateSubject.send(SubscriptionStateEvent(roomId: self.roomId, channel: self.channel, status: .unsubscribed)) }
+    }
+
+    // Without this a rejected subscribe was invisible: the channel never went
+    // live, nothing was raised, and the room looked fine while presence or
+    // typing silently never arrived.
+    func onError(_ sub: CentrifugeSubscription, _ event: CentrifugeSubscriptionErrorEvent) {
+        service?.markUnsubscribed(channel, removeFromClient: true)
+        DispatchQueue.main.async {
+            self.service?.subscriptionStateSubject.send(SubscriptionStateEvent(
+                roomId: self.roomId,
+                channel: self.channel,
+                status: .error,
+                reason: event.error.localizedDescription
+            ))
+            self.service?.errorSubject.send(ConnectionErrorEvent(
+                error: "Subscription failed on \(self.channel): \(event.error.localizedDescription)"
+            ))
+        }
     }
 
     func onJoin(_ sub: CentrifugeSubscription, _ event: CentrifugeJoinEvent) {

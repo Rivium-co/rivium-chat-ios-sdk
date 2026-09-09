@@ -33,4 +33,7 @@ public enum SubscriptionStatus: Equatable {
     case subscribing
     case subscribed
     case unsubscribed
+
+    /// The server rejected the subscribe, or it failed in transit.
+    case error
 }
