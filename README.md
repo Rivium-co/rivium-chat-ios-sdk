@@ -82,6 +82,37 @@ let client = RiviumChatClient(config: config)
 try await client.connect()
 ```
 
+### Secure user identity (recommended)
+
+Your API key ships inside the app, so on its own it cannot prove who the user
+is. Add a `tokenProvider` that asks **your server** for a user token:
+
+```swift
+let config = RiviumChatConfig(
+    apiKey: "your_api_key",
+    userId: "user-123",
+    tokenProvider: { try await myBackend.chatToken() }
+)
+
+// Revoked or invalid token — send the user to login.
+client.onAuthError
+    .sink { _ in signOut() }
+    .store(in: &cancellables)
+```
+
+Your server mints it with the server secret (never put the secret in the app):
+
+```http
+POST https://chat.rivium.co/api/v1/users/token
+x-api-key: your_api_key
+x-server-secret: your_server_secret
+
+{ "userId": "user-123" }
+```
+
+Tokens last 1 hour. The SDK refreshes them before they expire and retries a
+request once if the server reports an expired token, so users never notice.
+
 ### 2. Create or Join a Room
 
 ```swift

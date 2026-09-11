@@ -128,3 +128,22 @@ public struct SubscriptionStateEvent {
         self.reason = reason
     }
 }
+
+/// The server refused the user's identity and a token refresh cannot fix it:
+/// the token was revoked or invalid, the project requires a token, or the
+/// app's ``ChatTokenProvider`` failed. Typically: send the user to login.
+///
+/// `code` is the server's reason (`token_revoked`, `token_invalid`,
+/// `token_required`, `token_expired` after a failed refresh) or
+/// `token_provider_failed`.
+public struct AuthErrorEvent {
+    public let code: String
+    public let message: String
+    public let error: Error?
+
+    public init(code: String, message: String, error: Error? = nil) {
+        self.code = code
+        self.message = message
+        self.error = error
+    }
+}

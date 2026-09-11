@@ -34,12 +34,27 @@ public class RiviumChatClient {
     private let realtimeService: RealtimeService
     private var isDisposed = false
 
+    private let authErrorSubject = PassthroughSubject<AuthErrorEvent, Never>()
+
+    /// Identity errors a token refresh cannot fix (revoked or invalid token,
+    /// project requires a token, tokenProvider failing). Send the user to
+    /// login. Only emitted when ``RiviumChatConfig/tokenProvider`` is set.
+    public var onAuthError: AnyPublisher<AuthErrorEvent, Never> {
+        authErrorSubject.eraseToAnyPublisher()
+    }
+
     public init(config: RiviumChatConfig) {
         self.config = config
         self.apiService = ApiService(config: config)
+        let api = self.apiService
         self.realtimeService = RealtimeService(config) { [config] in
-            let api = ApiService(config: config)
+            // With a tokenProvider the same user token authenticates REST and
+            // the realtime connection; centrifuge asks again before it expires.
+            if let userToken = try await api.userTokenOrNil() { return userToken }
             return try await api.getCentrifugoToken(config.userId, info: config.userInfo)
+        }
+        self.apiService.onAuthError = { [weak self] event in
+            self?.authErrorSubject.send(event)
         }
     }
 

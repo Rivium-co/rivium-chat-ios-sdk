@@ -7,8 +7,14 @@ public class ApiService {
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
 
+    /// Set by ``RiviumChatClient`` so identity failures reach the app.
+    var onAuthError: ((AuthErrorEvent) -> Void)?
+
+    private let tokens: TokenManager?
+
     public init(config: RiviumChatConfig) {
         self.config = config
+        self.tokens = config.tokenProvider.map { TokenManager(provider: $0) }
 
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 30
@@ -351,31 +357,84 @@ public class ApiService {
 
     // MARK: - Private Helpers
 
+    /// A user token for the realtime connection, when a tokenProvider is set.
+    func userTokenOrNil() async throws -> String? {
+        try await tokens?.get()
+    }
+
+    /// Forgets the cached user token (e.g. on logout).
+    func clearUserToken() async {
+        await tokens?.clear()
+    }
+
+    /// Gets a user token, reporting a failing tokenProvider as an auth error.
+    private func userToken(_ get: () async throws -> String) async throws -> String {
+        do {
+            return try await get()
+        } catch {
+            onAuthError?(AuthErrorEvent(code: "token_provider_failed", message: "tokenProvider failed", error: error))
+            throw error
+        }
+    }
+
     private func request(method: String, path: String, body: [String: Any]? = nil) async throws -> Data {
         guard let url = URL(string: RiviumChatConfig.baseUrl + path) else {
             throw RiviumChatError.invalidURL
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.setValue(config.apiKey, forHTTPHeaderField: "x-api-key")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        if let body = body {
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        func send(_ userToken: String?) async throws -> (Data, HTTPURLResponse) {
+            var request = URLRequest(url: url)
+            request.httpMethod = method
+            request.setValue(config.apiKey, forHTTPHeaderField: "x-api-key")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            if let userToken {
+                request.setValue(userToken, forHTTPHeaderField: "x-user-token")
+            }
+            if let body = body {
+                request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            }
+            let (data, response) = try await session.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw RiviumChatError.invalidResponse
+            }
+            return (data, httpResponse)
         }
 
-        let (data, response) = try await session.data(for: request)
+        var data: Data
+        var httpResponse: HTTPURLResponse
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw RiviumChatError.invalidResponse
+        if let tokens {
+            (data, httpResponse) = try await send(try await userToken { try await tokens.get() })
+            // An expired token is routine: fetch a new one and replay the
+            // request once. The user never sees it.
+            if httpResponse.statusCode == 401, Self.authErrorCode(data) == "token_expired" {
+                (data, httpResponse) = try await send(try await userToken { try await tokens.refresh() })
+            }
+        } else {
+            (data, httpResponse) = try await send(nil)
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {
+            if httpResponse.statusCode == 401, tokens != nil, let code = Self.authErrorCode(data) {
+                onAuthError?(AuthErrorEvent(code: code, message: Self.authErrorMessage(data)))
+            }
             throw RiviumChatError.httpError(statusCode: httpResponse.statusCode, data: data)
         }
 
         return data
+    }
+
+    /// The identity error code (`token_*`) of a 401 body, if any.
+    private static func authErrorCode(_ data: Data) -> String? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let code = json["code"] as? String, code.hasPrefix("token_") else { return nil }
+        return code
+    }
+
+    private static func authErrorMessage(_ data: Data) -> String {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let message = json["message"] as? String else { return "Authentication failed" }
+        return message
     }
 }
 
