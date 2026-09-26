@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.3] - 2026-09-26
+
+- Added: `lastMessage` and `unreadCount` on `Room`. A chat list can show the
+  latest message and an unread badge from `listRooms()` alone, with no extra
+  calls.
+
 ## [0.1.2] - 2026-09-12
 
 - Added: `tokenProvider` for secure user identity. Tokens are refreshed automatically before they expire and after an expired-token response.

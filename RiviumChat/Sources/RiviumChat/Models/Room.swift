@@ -11,6 +11,13 @@ public struct Room: Codable, Equatable {
     public let createdAt: Date?
     public let updatedAt: Date?
     public let participants: [Participant]
+    /// The most recent message in the room, or nil when there are none. Sent by
+    /// `GET /rooms`, so a chat list can show a preview without loading each
+    /// room's messages.
+    public let lastMessage: Message?
+    /// Messages from other people that arrived after this user last read the
+    /// room. Sent by `GET /rooms`; 0 when everything has been read.
+    public let unreadCount: Int
 
     public init(
         id: String,
@@ -21,7 +28,9 @@ public struct Room: Codable, Equatable {
         isActive: Bool = true,
         createdAt: Date? = nil,
         updatedAt: Date? = nil,
-        participants: [Participant] = []
+        participants: [Participant] = [],
+        lastMessage: Message? = nil,
+        unreadCount: Int = 0
     ) {
         self.id = id
         self.type = type
@@ -32,5 +41,24 @@ public struct Room: Codable, Equatable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.participants = participants
+        self.lastMessage = lastMessage
+        self.unreadCount = unreadCount
+    }
+
+    // Both fields only arrive from `GET /rooms`; every other endpoint returns a
+    // room without them, so decoding must not fail when they are absent.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        type = try container.decodeIfPresent(RoomType.self, forKey: .type) ?? .direct
+        externalId = try container.decodeIfPresent(String.self, forKey: .externalId)
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        metadata = try container.decodeIfPresent([String: String].self, forKey: .metadata)
+        isActive = try container.decodeIfPresent(Bool.self, forKey: .isActive) ?? true
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
+        participants = try container.decodeIfPresent([Participant].self, forKey: .participants) ?? []
+        lastMessage = try container.decodeIfPresent(Message.self, forKey: .lastMessage)
+        unreadCount = try container.decodeIfPresent(Int.self, forKey: .unreadCount) ?? 0
     }
 }
