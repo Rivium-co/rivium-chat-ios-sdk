@@ -12,11 +12,15 @@ public class ApiService {
 
     private let tokens: TokenManager?
 
-    public init(config: RiviumChatConfig) {
+    public convenience init(config: RiviumChatConfig) {
+        self.init(config: config, sessionConfiguration: .default)
+    }
+
+    /// `sessionConfiguration` lets tests answer requests without a network.
+    init(config: RiviumChatConfig, sessionConfiguration configuration: URLSessionConfiguration) {
         self.config = config
         self.tokens = config.tokenProvider.map { TokenManager(provider: $0) }
 
-        let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 30
         configuration.timeoutIntervalForResource = 30
         self.session = URLSession(configuration: configuration)
@@ -387,6 +391,7 @@ public class ApiService {
             request.httpMethod = method
             request.setValue(config.apiKey, forHTTPHeaderField: "x-api-key")
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue(RiviumChatSDKInfo.headerValue, forHTTPHeaderField: RiviumChatSDKInfo.headerName)
             if let userToken {
                 request.setValue(userToken, forHTTPHeaderField: "x-user-token")
             }
