@@ -80,9 +80,9 @@ public class RiviumChatClient {
         let api = self.apiService
         self.realtimeService = RealtimeService(config) { [config] in
             // With a tokenProvider the same user token authenticates REST and
-            // the realtime connection; centrifuge asks again before it expires.
+            // the realtime connection; the realtime client asks again before it expires.
             if let userToken = try await api.userTokenOrNil() { return userToken }
-            return try await api.getCentrifugoToken(config.userId, info: config.userInfo)
+            return try await api.getRealtimeToken(config.userId, info: config.userInfo)
         }
         if config.queueOfflineMessages {
             let store: OutboxStore = config.outboxStore

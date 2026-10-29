@@ -2,7 +2,7 @@ import Foundation
 import Combine
 import SwiftCentrifuge
 
-/// Realtime service for RiviumChat using Centrifugo.
+/// Realtime service for RiviumChat.
 public class RealtimeService {
     private let config: RiviumChatConfig
     private let getToken: () async throws -> String
@@ -19,13 +19,13 @@ public class RealtimeService {
     /// Guards the three collections above.
     ///
     /// Subscribe and unsubscribe hand a channel name back and forth with
-    /// Centrifuge's own registry. A screen that leaves a room and rejoins it
+    /// the realtime client's own registry. A screen that leaves a room and rejoins it
     /// across a lifecycle event drives both without synchronisation, and
     /// interleaving them leaves the registries disagreeing — which surfaces as
     /// "Subscription to a channel already exists in client's internal registry".
     private let channelLock = NSRecursiveLock()
 
-    /// Tears one channel down: frees Centrifuge's registry entry *and*
+    /// Tears one channel down: frees the realtime client's registry entry *and*
     /// unsubscribes. The previous version removed the subscription from the
     /// client without ever calling `unsubscribe()`, leaving the server to
     /// believe the client was still subscribed.
@@ -97,7 +97,7 @@ public class RealtimeService {
     }
     private var additionalConnectContinuations: [CheckedContinuation<Void, Error>] = []
 
-    /// Guards the connect() continuations: they are resumed from Centrifuge's
+    /// Guards the connect() continuations: they are resumed from the realtime client's
     /// queue and from disconnect(), and resuming one twice crashes the app.
     private let continuationLock = NSLock()
 
@@ -166,7 +166,7 @@ public class RealtimeService {
         recoveryFailedSubject.receive(on: DispatchQueue.main).eraseToAnyPublisher()
     }
 
-    /// Whether a Centrifuge client (a socket) exists.
+    /// Whether a realtime client (a socket) exists.
     var hasClient: Bool { client != nil }
 
     /// Bumped by ``disconnect()``. A ``connect()`` still fetching its token
@@ -188,7 +188,7 @@ public class RealtimeService {
         }
     }
 
-    /// Unsubscribe codes Centrifuge sets itself (0 = unsubscribe called,
+    /// Unsubscribe codes the realtime client sets itself (0 = unsubscribe called,
     /// 2 = client closed). Every other code means the server refused or ended
     /// the subscription.
     static func isServerUnsubscribe(_ code: UInt32) -> Bool {
@@ -219,7 +219,7 @@ public class RealtimeService {
         }
     }
 
-    /// A channel's subscribe failed (Centrifuge retries temporary errors).
+    /// A channel's subscribe failed (the realtime client retries temporary errors).
     func handleSubscriptionError(roomId: String, channel: String, error: Error) {
         markUnsubscribed(channel, removeFromClient: true)
         let failure = Self.subscriptionFailure(error)
@@ -246,7 +246,7 @@ public class RealtimeService {
         self.decoder = RiviumChatJSON.decoder()
     }
 
-    /// Connect to the Centrifugo server.
+    /// Connect to the realtime server.
     /// Waits until the WebSocket connection is actually established before returning.
     public func connect() async throws {
         // Already connected
@@ -296,7 +296,7 @@ public class RealtimeService {
         clientConfig.tokenGetter = connectionTokenGetter()
 
         client = CentrifugeClient(
-            endpoint: RiviumChatConfig.centrifugoUrl,
+            endpoint: RiviumChatConfig.realtimeUrl,
             config: clientConfig,
             delegate: self
         )
@@ -311,7 +311,7 @@ public class RealtimeService {
     }
 
     /// Fetches a fresh connection token from the same source as the first
-    /// one. Calls `completion` exactly once, as Centrifuge requires.
+    /// one. Calls `completion` exactly once, as the realtime client requires.
     func connectionTokenGetter() -> CentrifugeConnectionTokenGetter {
         let getToken = self.getToken
         return { _, completion in
@@ -325,10 +325,10 @@ public class RealtimeService {
         }
     }
 
-    /// Disconnect from the Centrifugo server.
+    /// Disconnect from the realtime server.
     public func disconnect() {
         generation += 1
-        // Free Centrifuge's registry as well as our own maps. Clearing only our
+        // Free the realtime client's registry as well as our own maps. Clearing only our
         // maps left every channel name held by the client, so each one threw
         // "already exists" on the next subscribe for the life of the process.
         channelLock.lock()
@@ -362,7 +362,7 @@ public class RealtimeService {
     public func observeRoom(_ roomId: String) {
         guard let client = client else { return }
 
-        // The delegates mutate the same maps from Centrifuge's queue.
+        // The delegates mutate the same maps from the realtime client's queue.
         channelLock.lock()
         defer { channelLock.unlock() }
         do {
@@ -388,7 +388,7 @@ public class RealtimeService {
             return
         }
 
-        // The delegates mutate the same maps from Centrifuge's queue.
+        // The delegates mutate the same maps from the realtime client's queue.
         channelLock.lock()
         defer { channelLock.unlock() }
         do {

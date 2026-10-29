@@ -154,7 +154,7 @@ final class RealtimeServiceTests: XCTestCase {
         XCTAssertEqual(second, "token-2")
     }
 
-    func testTokenGetterHandsAFailureBackToCentrifuge() async {
+    func testTokenGetterHandsAFailureBackToTheRealtimeClient() async {
         struct Offline: Error {}
         let service = RealtimeService(config) { throw Offline() }
 

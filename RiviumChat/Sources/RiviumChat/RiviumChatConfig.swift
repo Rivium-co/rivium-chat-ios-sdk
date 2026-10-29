@@ -37,8 +37,12 @@ public struct RiviumChatConfig {
     /// Base URL for the RiviumChat API
     public static let baseUrl = "https://chat.rivium.co"
 
-    /// WebSocket URL for Centrifugo realtime server
-    public static let centrifugoUrl = "wss://ws-chat.rivium.co/connection/websocket"
+    /// WebSocket URL for the realtime server
+    public static let realtimeUrl = "wss://ws-chat.rivium.co/connection/websocket"
+
+    /// WebSocket URL for the realtime server
+    @available(*, deprecated, renamed: "realtimeUrl")
+    public static let centrifugoUrl = realtimeUrl
 
     /// Your RiviumChat API key
     public let apiKey: String

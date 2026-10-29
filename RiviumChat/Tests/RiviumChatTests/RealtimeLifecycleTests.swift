@@ -66,7 +66,7 @@ final class RealtimeLifecycleTests: XCTestCase {
             state.fulfill()
         }.store(in: &cancellables)
 
-        // Centrifuge ends a subscription the server refuses for good with the
+        // The realtime client ends a subscription the server refuses for good with the
         // server's code and reason (no error callback).
         service.handleUnsubscribed(roomId: "room-1", channel: "chat:room_room-1", code: 403, reason: "Not a participant in this room")
 
@@ -105,14 +105,14 @@ final class RealtimeLifecycleTests: XCTestCase {
 
     func testASubscribeErrorCarriesTheServersCode() {
         let failure = RealtimeService.subscriptionFailure(
-            CentrifugeErrorForTests.subscribe(code: 403, message: "Not a participant in this room")
+            RealtimeErrorForTests.subscribe(code: 403, message: "Not a participant in this room")
         )
         XCTAssertEqual(failure.code, 403)
         XCTAssertEqual(failure.reason, "Not a participant in this room")
     }
 }
 
-enum CentrifugeErrorForTests {
+enum RealtimeErrorForTests {
     static func subscribe(code: UInt32, message: String) -> Error {
         CentrifugeError.subscriptionSubscribeError(
             error: CentrifugeError.replyError(code: code, message: message, temporary: false)

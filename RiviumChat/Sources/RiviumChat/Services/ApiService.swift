@@ -409,8 +409,8 @@ public class ApiService {
         let message: Message?
     }
 
-    /// Gets a Centrifugo connection token.
-    public func getCentrifugoToken(
+    /// Gets a realtime connection token.
+    public func getRealtimeToken(
         _ userId: String,
         info: [String: String]? = nil
     ) async throws -> String {
@@ -420,6 +420,7 @@ public class ApiService {
         }
         let data = try await request(
             method: "POST",
+            // Chat API route that issues the realtime connection token.
             path: try ApiRoute.path(["centrifugo", "token"]),
             body: body
         )
@@ -428,6 +429,15 @@ public class ApiService {
             throw RiviumChatError.decodingError(NSError(domain: "RiviumChat", code: 0, userInfo: [NSLocalizedDescriptionKey: "Missing token in response"]))
         }
         return token
+    }
+
+    /// Gets a realtime connection token.
+    @available(*, deprecated, renamed: "getRealtimeToken(_:info:)")
+    public func getCentrifugoToken(
+        _ userId: String,
+        info: [String: String]? = nil
+    ) async throws -> String {
+        try await getRealtimeToken(userId, info: info)
     }
 
     /// Disposes resources.
