@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'RiviumChat'
-  s.version          = '0.1.4'
+  s.version          = '0.2.0'
   s.summary          = 'Real-time messaging SDK for iOS'
   s.description      = <<-DESC
     RiviumChat is a real-time messaging SDK for iOS with WebSocket-based
@@ -20,7 +20,7 @@ Pod::Spec.new do |s|
 
   s.source_files = 'RiviumChat/Sources/**/*.swift'
 
-  s.dependency 'SwiftCentrifuge', '~> 0.5'
+  s.dependency 'SwiftCentrifuge', '~> 0.8'
 
   s.frameworks = 'Foundation'
 

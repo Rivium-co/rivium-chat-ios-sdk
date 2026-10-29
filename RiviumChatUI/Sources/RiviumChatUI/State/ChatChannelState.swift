@@ -38,6 +38,14 @@ public final class ChatChannelState: ObservableObject {
     /// Current error state
     @Published public private(set) var error: Error?
 
+    /// Display names of the room's participants, by user id.
+    @Published public private(set) var participantDisplayNames: [String: String] = [:]
+
+    /// The participant's display name, or their user id when they have none.
+    public func displayName(for userId: String) -> String {
+        participantDisplayNames[userId] ?? userId
+    }
+
     private let client: RiviumChatClient
     private var cancellables = Set<AnyCancellable>()
     private var typingTimers: [String: Timer] = [:]
@@ -58,6 +66,7 @@ public final class ChatChannelState: ObservableObject {
             // Load initial messages
             let result = try await client.getMessages(roomId, limit: 50)
             messages = result.messages.reversed() // Newest first
+            QueuedMessageMerge.addQueued(&messages, client.getPendingMessages(roomId: roomId))
             hasMore = result.messages.count >= 50
 
             // Get initial presence
@@ -71,6 +80,13 @@ public final class ChatChannelState: ObservableObject {
             // Load initial read state from room participants
             do {
                 let room = try await client.getRoom(roomId)
+                var names: [String: String] = [:]
+                for participant in room.participants {
+                    if let name = participant.displayName, !name.isEmpty {
+                        names[participant.externalUserId] = name
+                    }
+                }
+                participantDisplayNames = names
                 let otherParticipant = room.participants.first {
                     $0.externalUserId != currentUserId
                 }
@@ -90,6 +106,20 @@ public final class ChatChannelState: ObservableObject {
         } catch {
             self.error = error
             isInitialLoading = false
+        }
+    }
+
+    /// Reloads the latest messages, replacing the list. Called when the
+    /// room's live updates could not be followed (``RiviumChatClient/onRecoveryFailed``).
+    public func refresh() async {
+        do {
+            let result = try await client.getMessages(roomId, limit: 50)
+            messages = result.messages.reversed() // Newest first
+            QueuedMessageMerge.addQueued(&messages, client.getPendingMessages(roomId: roomId))
+            hasMore = result.messages.count >= 50
+            self.error = nil
+        } catch {
+            self.error = error
         }
     }
 
@@ -155,10 +185,9 @@ public final class ChatChannelState: ObservableObject {
                 replyToId: replyId
             )
 
-            // Replace pending message with real one
-            if let index = messages.firstIndex(where: { $0.id == pendingId }) {
-                messages[index] = sentMessage
-            }
+            // Replace pending message with the real one (or the queued one,
+            // shown as "Waiting for network…"); never twice.
+            QueuedMessageMerge.applySendResult(&messages, placeholderId: pendingId, sent: sentMessage)
         } catch {
             // Mark as failed
             if let index = messages.firstIndex(where: { $0.id == pendingId }) {
@@ -194,10 +223,12 @@ public final class ChatChannelState: ObservableObject {
               messages[index].isFailed else { return }
 
         let message = messages[index]
+        // A queued message that failed is sent again as a new message.
+        let retryId = message.id.hasPrefix(PendingMessage.localIdPrefix) ? "pending_\(UUID().uuidString)" : messageId
 
         // Mark as pending again
         messages[index] = Message(
-            id: message.id,
+            id: retryId,
             roomId: message.roomId,
             senderUserId: message.senderUserId,
             content: message.content,
@@ -227,13 +258,11 @@ public final class ChatChannelState: ObservableObject {
                 replyToId: message.replyToId
             )
 
-            if let newIndex = messages.firstIndex(where: { $0.id == messageId }) {
-                messages[newIndex] = sentMessage
-            }
+            QueuedMessageMerge.applySendResult(&messages, placeholderId: retryId, sent: sentMessage)
         } catch {
-            if let newIndex = messages.firstIndex(where: { $0.id == messageId }) {
+            if let newIndex = messages.firstIndex(where: { $0.id == retryId }) {
                 messages[newIndex] = Message(
-                    id: message.id,
+                    id: retryId,
                     roomId: message.roomId,
                     senderUserId: message.senderUserId,
                     content: message.content,
@@ -270,10 +299,42 @@ public final class ChatChannelState: ObservableObject {
     /// Edit a message
     public func editMessage(messageId: String, newContent: String) async {
         do {
-            let _ = try await client.editMessage(messageId, content: newContent)
+            let edited = try await client.editMessage(messageId, content: newContent)
+            // Show the edit right away; the realtime event confirms it again.
+            updateMessage(messageId) { current in
+                let editedAt: Date? = edited.editedAt ?? current.editedAt
+                return current.copy(content: edited.content, isEdited: true, editedAt: editedAt)
+            }
         } catch {
             self.error = error
         }
+    }
+
+    /// Pin a message
+    public func pinMessage(messageId: String) async {
+        do {
+            let pinned = try await client.pinMessage(messageId)
+            updateMessage(messageId) {
+                $0.copy(isPinned: true, pinnedAt: pinned.pinnedAt ?? Date(), pinnedBy: pinned.pinnedBy ?? currentUserId)
+            }
+        } catch {
+            self.error = error
+        }
+    }
+
+    /// Unpin a message
+    public func unpinMessage(messageId: String) async {
+        do {
+            try await client.unpinMessage(messageId)
+            updateMessage(messageId) { $0.copy(isPinned: false, pinnedAt: .some(nil), pinnedBy: .some(nil)) }
+        } catch {
+            self.error = error
+        }
+    }
+
+    private func updateMessage(_ messageId: String, _ change: (Message) -> Message) {
+        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
+        messages[index] = change(messages[index])
     }
 
     /// Add a reaction to a message
@@ -318,16 +379,32 @@ public final class ChatChannelState: ObservableObject {
     }
 
     /// Clean up resources
+    ///
+    /// Leaves the room's presence and typing channels but keeps its chat
+    /// channel, so anything else watching the room (a conversation list,
+    /// unread badges) keeps receiving its messages. Only this state's own
+    /// listeners are dropped.
     public func dispose() {
         cancellables.removeAll()
         typingTimers.values.forEach { $0.invalidate() }
         typingTimers.removeAll()
-        client.unsubscribeRoom(roomId)
+        client.leaveRoom(roomId)
     }
 
     // MARK: - Private Methods
 
     private func startEventCollection() {
+        // Live updates were missed (long disconnect) or the server ended the
+        // room's subscription: reload the history.
+        client.onRecoveryFailed
+            .receive(on: DispatchQueue.main)
+            .filter { [roomId] in $0 == roomId }
+            .sink { [weak self] _ in
+                guard let self else { return }
+                Task { await self.refresh() }
+            }
+            .store(in: &cancellables)
+
         // New messages
         client.onMessage
             .receive(on: DispatchQueue.main)
@@ -335,15 +412,26 @@ public final class ChatChannelState: ObservableObject {
                 guard let self = self else { return }
                 guard message.roomId == self.roomId else { return }
 
-                // Check if this is a confirmation for a pending message
-                if let pendingIndex = self.messages.firstIndex(where: {
-                    $0.isPending && $0.content == message.content &&
-                    $0.senderUserId == message.senderUserId
-                }) {
-                    self.messages[pendingIndex] = message
-                } else if !self.messages.contains(where: { $0.id == message.id }) {
-                    self.messages.insert(message, at: 0)
-                }
+                // Confirmation of a pending or queued copy, or a new message: shown once
+                QueuedMessageMerge.mergeLive(&self.messages, message)
+            }
+            .store(in: &cancellables)
+
+        // Offline outbox: a queued message was stored
+        client.onMessageSent
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] event in
+                guard let self = self, event.message.roomId == self.roomId else { return }
+                QueuedMessageMerge.mergeSent(&self.messages, localId: event.localId, message: event.message)
+            }
+            .store(in: &cancellables)
+
+        // Offline outbox: a queued message left the queue unsent
+        client.onMessageFailed
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] event in
+                guard let self = self, event.roomId == self.roomId else { return }
+                QueuedMessageMerge.markFailed(&self.messages, localId: event.localId)
             }
             .store(in: &cancellables)
 
@@ -462,6 +550,20 @@ public final class ChatChannelState: ObservableObject {
             }
             .store(in: &cancellables)
 
+        // Pin changes (from anyone in the room)
+        client.onMessagePinChanged
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] event in
+                guard let self = self else { return }
+                guard event.roomId == self.roomId else { return }
+                self.updateMessage(event.messageId) {
+                    event.pinned
+                        ? $0.copy(isPinned: true, pinnedAt: $0.pinnedAt ?? Date(), pinnedBy: event.userId)
+                        : $0.copy(isPinned: false, pinnedAt: .some(nil), pinnedBy: .some(nil))
+                }
+            }
+            .store(in: &cancellables)
+
         // Typing indicators
         client.onTypingEvent
             .receive(on: DispatchQueue.main)
@@ -516,10 +618,74 @@ public final class ChatChannelState: ObservableObject {
     }
 }
 
+private extension Message {
+    /// This message with the given fields replaced.
+    func copy(
+        content: String? = nil,
+        isEdited: Bool? = nil,
+        editedAt: Date?? = nil,
+        isPinned: Bool? = nil,
+        pinnedAt: Date?? = nil,
+        pinnedBy: String?? = nil
+    ) -> Message {
+        Message(
+            id: id,
+            roomId: roomId,
+            senderUserId: senderUserId,
+            content: content ?? self.content,
+            type: type,
+            attachments: attachments,
+            metadata: metadata,
+            replyToId: replyToId,
+            replyTo: replyTo,
+            isDeleted: isDeleted,
+            createdAt: createdAt,
+            isEdited: isEdited ?? self.isEdited,
+            editedAt: editedAt ?? self.editedAt,
+            editHistory: editHistory,
+            isPinned: isPinned ?? self.isPinned,
+            pinnedAt: pinnedAt ?? self.pinnedAt,
+            pinnedBy: pinnedBy ?? self.pinnedBy,
+            reactions: reactions,
+            isPending: isPending,
+            isFailed: isFailed
+        )
+    }
+}
+
+/// Holds a screen's ChatChannelState once the client is known.
+///
+/// A placeholder state built with an empty API key used to stand in until
+/// then, and RiviumChatConfig rejects an empty key, so the screen crashed as
+/// soon as it was created.
+@MainActor
+final class ChatChannelStateHolder: ObservableObject {
+    private(set) var state: ChatChannelState?
+
+    func state(client: RiviumChatClient, roomId: String, currentUserId: String) -> ChatChannelState {
+        if let state { return state }
+        let created = ChatChannelState(client: client, roomId: roomId, currentUserId: currentUserId)
+        state = created
+        return created
+    }
+}
+
+/// Initialises a state on appear and disposes it on disappear.
+private struct ChatChannelLifecycle<Content: View>: View {
+    @ObservedObject var state: ChatChannelState
+    let content: (ChatChannelState) -> Content
+
+    var body: some View {
+        content(state)
+            .task { await state.initialize() }
+            .onDisappear { state.dispose() }
+    }
+}
+
 /// View modifier that provides ChatChannelState
 public struct ChatChannelScope<Content: View>: View {
     @Environment(\.riviumChatClient) private var client
-    @StateObject private var state: ChatChannelState
+    @StateObject private var holder = ChatChannelStateHolder()
     private let roomId: String
     private let currentUserId: String
     private let content: (ChatChannelState) -> Content
@@ -532,25 +698,18 @@ public struct ChatChannelScope<Content: View>: View {
         self.roomId = roomId
         self.currentUserId = currentUserId
         self.content = content
-
-        // Note: This creates a placeholder state that will be replaced
-        // The actual state is created in onAppear when we have the client
-        _state = StateObject(wrappedValue: ChatChannelState(
-            client: RiviumChatClient(config: RiviumChatConfig(apiKey: "", userId: "")),
-            roomId: roomId,
-            currentUserId: currentUserId
-        ))
     }
 
     public var body: some View {
-        content(state)
-            .task {
-                if let _ = client {
-                    await state.initialize()
-                }
-            }
-            .onDisappear {
-                state.dispose()
-            }
+        if let client {
+            ChatChannelLifecycle(
+                state: holder.state(client: client, roomId: roomId, currentUserId: currentUserId),
+                content: content
+            )
+        } else {
+            // No client in the environment yet (wrap in RiviumChatScope or
+            // RiviumChatProvider).
+            ProgressView()
+        }
     }
 }

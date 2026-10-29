@@ -15,7 +15,7 @@ let package = Package(
     ],
     dependencies: [
         // Centrifuge Swift client for Centrifugo
-        .package(url: "https://github.com/centrifugal/centrifuge-swift.git", from: "0.5.0"),
+        .package(url: "https://github.com/centrifugal/centrifuge-swift.git", from: "0.8.0"),
     ],
     targets: [
         .target(

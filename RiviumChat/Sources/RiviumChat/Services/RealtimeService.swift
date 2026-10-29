@@ -97,6 +97,19 @@ public class RealtimeService {
     }
     private var additionalConnectContinuations: [CheckedContinuation<Void, Error>] = []
 
+    /// Guards the connect() continuations: they are resumed from Centrifuge's
+    /// queue and from disconnect(), and resuming one twice crashes the app.
+    private let continuationLock = NSLock()
+
+    /// Takes every waiting connect() continuation, so each is resumed once.
+    private func takeConnectContinuations() -> [CheckedContinuation<Void, Error>] {
+        continuationLock.lock(); defer { continuationLock.unlock() }
+        let waiting = [connectContinuation].compactMap { $0 } + additionalConnectContinuations
+        connectContinuation = nil
+        additionalConnectContinuations.removeAll()
+        return waiting
+    }
+
     // Event publishers — all deliver on main thread for SwiftUI compatibility
     private let messageSubject = PassthroughSubject<Message, Never>()
     public var onMessage: AnyPublisher<Message, Never> {
@@ -153,11 +166,84 @@ public class RealtimeService {
         recoveryFailedSubject.receive(on: DispatchQueue.main).eraseToAnyPublisher()
     }
 
+    /// Whether a Centrifuge client (a socket) exists.
+    var hasClient: Bool { client != nil }
+
+    /// Bumped by ``disconnect()``. A ``connect()`` still fetching its token
+    /// when the app disconnected (or disposed) must not open a socket after.
+    private var generation = 0
+
+    /// The server's code and reason behind a subscription error, when it sent
+    /// one (for example 403, `Not a participant in this room`).
+    static func subscriptionFailure(_ error: Error) -> (code: Int?, reason: String) {
+        switch error {
+        case CentrifugeError.replyError(let code, let message, _):
+            return (Int(code), message)
+        case CentrifugeError.subscriptionSubscribeError(let inner),
+             CentrifugeError.subscriptionTokenError(let inner),
+             CentrifugeError.subscriptionRefreshError(let inner):
+            return subscriptionFailure(inner)
+        default:
+            return (nil, String(describing: error))
+        }
+    }
+
+    /// Unsubscribe codes Centrifuge sets itself (0 = unsubscribe called,
+    /// 2 = client closed). Every other code means the server refused or ended
+    /// the subscription.
+    static func isServerUnsubscribe(_ code: UInt32) -> Bool {
+        code != 0 && code != 2
+    }
+
+    /// A channel's subscription ended. When the server refused or ended it
+    /// (for example: not a participant of the room) the dead subscription is
+    /// dropped so a later subscribe builds a fresh one, and for the chat
+    /// channel the app hears `onRecoveryFailed`: the room's live updates
+    /// stopped, so it should reload or show the refusal.
+    func handleUnsubscribed(roomId: String, channel: String, code: UInt32, reason: String) {
+        let refused = Self.isServerUnsubscribe(code)
+        markUnsubscribed(channel, removeFromClient: refused)
+        DispatchQueue.main.async {
+            self.subscriptionStateSubject.send(SubscriptionStateEvent(
+                roomId: roomId,
+                channel: channel,
+                status: .unsubscribed,
+                code: Int(code),
+                reason: reason
+            ))
+            guard refused else { return }
+            self.errorSubject.send(ConnectionErrorEvent(error: "Subscription refused on \(channel): \(reason)"))
+            if channel.hasPrefix("chat:") {
+                self.recoveryFailedSubject.send(roomId)
+            }
+        }
+    }
+
+    /// A channel's subscribe failed (Centrifuge retries temporary errors).
+    func handleSubscriptionError(roomId: String, channel: String, error: Error) {
+        markUnsubscribed(channel, removeFromClient: true)
+        let failure = Self.subscriptionFailure(error)
+        DispatchQueue.main.async {
+            self.subscriptionStateSubject.send(SubscriptionStateEvent(
+                roomId: roomId,
+                channel: channel,
+                status: .error,
+                code: failure.code,
+                reason: failure.reason
+            ))
+            self.errorSubject.send(ConnectionErrorEvent(
+                error: "Subscription failed on \(channel): \(failure.reason)"
+            ))
+            if channel.hasPrefix("chat:") {
+                self.recoveryFailedSubject.send(roomId)
+            }
+        }
+    }
+
     public init(_ config: RiviumChatConfig, _ getToken: @escaping () async throws -> String) {
         self.config = config
         self.getToken = getToken
-        self.decoder = JSONDecoder()
-        self.decoder.dateDecodingStrategy = .iso8601
+        self.decoder = RiviumChatJSON.decoder()
     }
 
     /// Connect to the Centrifugo server.
@@ -171,19 +257,43 @@ public class RealtimeService {
         // Connection in progress — wait for it
         if client != nil && currentConnectionState == .connecting {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                self.continuationLock.lock()
                 self.additionalConnectContinuations.append(continuation)
+                self.continuationLock.unlock()
             }
             return
         }
 
         guard client == nil else { return }
 
+        let attempt = generation
         connectionStateSubject.send(.connecting)
 
-        let token = try await getToken()
+        let token: String
+        do {
+            token = try await getToken()
+        } catch {
+            // disconnect() ran meanwhile: it already set the state.
+            guard attempt == generation else { throw CancellationError() }
+            // No connection without a token (unknown key, token required,
+            // API unreachable, tokenProvider failed): report it like any
+            // connection error. Without this the state stayed "connecting".
+            connectionStateSubject.send(.error)
+            DispatchQueue.main.async {
+                self.errorSubject.send(ConnectionErrorEvent(error: error))
+            }
+            throw error
+        }
+
+        // disconnect() or dispose() ran while the token was being fetched:
+        // the app asked to be offline, so open no socket.
+        guard attempt == generation, client == nil else { throw CancellationError() }
 
         var clientConfig = CentrifugeClientConfig()
         clientConfig.token = token
+        // Asked again whenever the token expires or is rejected, so a
+        // long-lived connection survives token expiry.
+        clientConfig.tokenGetter = connectionTokenGetter()
 
         client = CentrifugeClient(
             endpoint: RiviumChatConfig.centrifugoUrl,
@@ -193,13 +303,31 @@ public class RealtimeService {
 
         // Wait for the onConnected or onError callback before returning
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            self.continuationLock.lock()
             self.connectContinuation = continuation
+            self.continuationLock.unlock()
             self.client?.connect()
+        }
+    }
+
+    /// Fetches a fresh connection token from the same source as the first
+    /// one. Calls `completion` exactly once, as Centrifuge requires.
+    func connectionTokenGetter() -> CentrifugeConnectionTokenGetter {
+        let getToken = self.getToken
+        return { _, completion in
+            Task {
+                do {
+                    completion(.success(try await getToken()))
+                } catch {
+                    completion(.failure(error))
+                }
+            }
         }
     }
 
     /// Disconnect from the Centrifugo server.
     public func disconnect() {
+        generation += 1
         // Free Centrifuge's registry as well as our own maps. Clearing only our
         // maps left every channel name held by the client, so each one threw
         // "already exists" on the next subscribe for the life of the process.
@@ -213,6 +341,12 @@ public class RealtimeService {
         client?.disconnect()
         client = nil
         connectionStateSubject.send(.disconnected)
+
+        // A connect() still waiting for the socket would wait forever (and
+        // leak its continuation): it ends with a cancellation instead.
+        for continuation in takeConnectContinuations() {
+            continuation.resume(throwing: CancellationError())
+        }
     }
 
     /// Drops the current connection and opens a new one.
@@ -228,6 +362,9 @@ public class RealtimeService {
     public func observeRoom(_ roomId: String) {
         guard let client = client else { return }
 
+        // The delegates mutate the same maps from Centrifuge's queue.
+        channelLock.lock()
+        defer { channelLock.unlock() }
         do {
             let chatChannel = "chat:room_\(roomId)"
             if shouldSubscribe(chatChannel) {
@@ -251,6 +388,9 @@ public class RealtimeService {
             return
         }
 
+        // The delegates mutate the same maps from Centrifuge's queue.
+        channelLock.lock()
+        defer { channelLock.unlock() }
         do {
             // Chat channel (messages, read receipts, etc.) — recoverable
             let chatChannel = "chat:room_\(roomId)"
@@ -308,7 +448,10 @@ public class RealtimeService {
     /// Gets currently online users in a room.
     public func getRoomPresence(_ roomId: String) async throws -> Set<String> {
         let channel = "presence:room_\(roomId)"
-        guard let sub = subscriptions[channel] else { return [] }
+        channelLock.lock()
+        let subscription = subscriptions[channel]
+        channelLock.unlock()
+        guard let sub = subscription else { return [] }
 
         return try await withCheckedThrowingContinuation { continuation in
             sub.presence { result in
@@ -326,17 +469,26 @@ public class RealtimeService {
         }
     }
 
-    /// Publishes a typing indicator.
-    private var lastTypingTime: TimeInterval = 0
+    /// Last typing publish per room, so typing in one room never mutes another.
+    private var lastTypingTimes: [String: TimeInterval] = [:]
+    private let typingLock = NSLock()
 
-    /// Publishes a typing indicator (throttled to 2 seconds).
+    /// Throttles typing to one publish every 2 seconds for each room.
+    func shouldPublishTyping(_ roomId: String, now: TimeInterval) -> Bool {
+        typingLock.lock(); defer { typingLock.unlock() }
+        if let last = lastTypingTimes[roomId], now - last < 2.0 { return false }
+        lastTypingTimes[roomId] = now
+        return true
+    }
+
+    /// Publishes a typing indicator (throttled to 2 seconds per room).
     public func publishTyping(_ roomId: String) {
-        let now = Date().timeIntervalSince1970
-        guard now - lastTypingTime >= 2.0 else { return }
-        lastTypingTime = now
-
         let channel = "typing:room_\(roomId)"
-        guard let sub = subscriptions[channel] else { return }
+        channelLock.lock()
+        let subscription = subscriptions[channel]
+        channelLock.unlock()
+        guard let sub = subscription else { return }
+        guard shouldPublishTyping(roomId, now: Date().timeIntervalSince1970) else { return }
 
         let payload: [String: Any] = [
             "userId": config.userId,
@@ -373,9 +525,7 @@ public class RealtimeService {
             case "read":
                 if let userId = payload["userId"] as? String,
                    let readAtString = payload["readAt"] as? String {
-                    let formatter = ISO8601DateFormatter()
-                    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                    let readAt = formatter.date(from: readAtString) ?? ISO8601DateFormatter().date(from: readAtString) ?? Date()
+                    let readAt = RiviumChatJSON.parseDate(readAtString) ?? Date()
                     let roomId = payload["roomId"] as? String ?? roomId
                     DispatchQueue.main.async { self.readReceiptSubject.send(ReadReceipt(userId: userId, roomId: roomId, readAt: readAt)) }
                 }
@@ -392,9 +542,7 @@ public class RealtimeService {
                    let content = payload["content"] as? String,
                    let editedBy = payload["editedBy"] as? String,
                    let editedAtString = payload["editedAt"] as? String {
-                    let fmt = ISO8601DateFormatter()
-                    fmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                    let editedAt = fmt.date(from: editedAtString) ?? ISO8601DateFormatter().date(from: editedAtString) ?? Date()
+                    let editedAt = RiviumChatJSON.parseDate(editedAtString) ?? Date()
                     let roomId = payload["roomId"] as? String ?? roomId
                     DispatchQueue.main.async { self.editSubject.send(MessageEditEvent(messageId: messageId, roomId: roomId, content: content, editedBy: editedBy, editedAt: editedAt)) }
                 }
@@ -478,12 +626,9 @@ extension RealtimeService: CentrifugeClientDelegate {
         DispatchQueue.main.async { self.connectionStateSubject.send(.connected) }
 
         // Resume connect() awaiters
-        connectContinuation?.resume()
-        connectContinuation = nil
-        for continuation in additionalConnectContinuations {
+        for continuation in takeConnectContinuations() {
             continuation.resume()
         }
-        additionalConnectContinuations.removeAll()
 
         // Process any pending room subscriptions
         let pending = pendingRoomSubscriptions
@@ -509,14 +654,9 @@ extension RealtimeService: CentrifugeClientDelegate {
         }
 
         // Resume connect() awaiters with error if still waiting
-        if let continuation = connectContinuation {
-            continuation.resume(throwing: RiviumChatError.connectionError(event.error))
-            connectContinuation = nil
-        }
-        for continuation in additionalConnectContinuations {
+        for continuation in takeConnectContinuations() {
             continuation.resume(throwing: RiviumChatError.connectionError(event.error))
         }
-        additionalConnectContinuations.removeAll()
     }
 }
 
@@ -548,34 +688,13 @@ private class ChatChannelDelegate: CentrifugeSubscriptionDelegate {
     }
 
     func onUnsubscribed(_ sub: CentrifugeSubscription, _ event: CentrifugeUnsubscribedEvent) {
-        service?.markUnsubscribed(channel)
-        DispatchQueue.main.async {
-            self.service?.subscriptionStateSubject.send(SubscriptionStateEvent(
-                roomId: self.roomId,
-                channel: self.channel,
-                status: .unsubscribed,
-                code: Int(event.code),
-                reason: event.reason
-            ))
-        }
+        service?.handleUnsubscribed(roomId: roomId, channel: channel, code: event.code, reason: event.reason)
     }
 
     func onError(_ sub: CentrifugeSubscription, _ event: CentrifugeSubscriptionErrorEvent) {
         // Drop the dead subscription so the next subscribe builds a fresh one
         // instead of short-circuiting on a stale entry.
-        service?.markUnsubscribed(channel, removeFromClient: true)
-        DispatchQueue.main.async {
-            self.service?.subscriptionStateSubject.send(SubscriptionStateEvent(
-                roomId: self.roomId,
-                channel: self.channel,
-                status: .error,
-                reason: event.error.localizedDescription
-            ))
-            self.service?.errorSubject.send(ConnectionErrorEvent(
-                error: "Subscription failed on \(self.channel): \(event.error.localizedDescription)"
-            ))
-            self.service?.recoveryFailedSubject.send(self.roomId)
-        }
+        service?.handleSubscriptionError(roomId: roomId, channel: channel, error: event.error)
     }
 
     func onPublication(_ sub: CentrifugeSubscription, _ event: CentrifugePublicationEvent) {
@@ -606,26 +725,14 @@ private class TypingChannelDelegate: CentrifugeSubscriptionDelegate {
     }
 
     func onUnsubscribed(_ sub: CentrifugeSubscription, _ event: CentrifugeUnsubscribedEvent) {
-        service?.markUnsubscribed(channel)
-        DispatchQueue.main.async { self.service?.subscriptionStateSubject.send(SubscriptionStateEvent(roomId: self.roomId, channel: self.channel, status: .unsubscribed)) }
+        service?.handleUnsubscribed(roomId: roomId, channel: channel, code: event.code, reason: event.reason)
     }
 
     // Without this a rejected subscribe was invisible: the channel never went
     // live, nothing was raised, and the room looked fine while presence or
     // typing silently never arrived.
     func onError(_ sub: CentrifugeSubscription, _ event: CentrifugeSubscriptionErrorEvent) {
-        service?.markUnsubscribed(channel, removeFromClient: true)
-        DispatchQueue.main.async {
-            self.service?.subscriptionStateSubject.send(SubscriptionStateEvent(
-                roomId: self.roomId,
-                channel: self.channel,
-                status: .error,
-                reason: event.error.localizedDescription
-            ))
-            self.service?.errorSubject.send(ConnectionErrorEvent(
-                error: "Subscription failed on \(self.channel): \(event.error.localizedDescription)"
-            ))
-        }
+        service?.handleSubscriptionError(roomId: roomId, channel: channel, error: event.error)
     }
 
     func onPublication(_ sub: CentrifugeSubscription, _ event: CentrifugePublicationEvent) {
@@ -667,26 +774,14 @@ private class PresenceChannelDelegate: CentrifugeSubscriptionDelegate {
     }
 
     func onUnsubscribed(_ sub: CentrifugeSubscription, _ event: CentrifugeUnsubscribedEvent) {
-        service?.markUnsubscribed(channel)
-        DispatchQueue.main.async { self.service?.subscriptionStateSubject.send(SubscriptionStateEvent(roomId: self.roomId, channel: self.channel, status: .unsubscribed)) }
+        service?.handleUnsubscribed(roomId: roomId, channel: channel, code: event.code, reason: event.reason)
     }
 
     // Without this a rejected subscribe was invisible: the channel never went
     // live, nothing was raised, and the room looked fine while presence or
     // typing silently never arrived.
     func onError(_ sub: CentrifugeSubscription, _ event: CentrifugeSubscriptionErrorEvent) {
-        service?.markUnsubscribed(channel, removeFromClient: true)
-        DispatchQueue.main.async {
-            self.service?.subscriptionStateSubject.send(SubscriptionStateEvent(
-                roomId: self.roomId,
-                channel: self.channel,
-                status: .error,
-                reason: event.error.localizedDescription
-            ))
-            self.service?.errorSubject.send(ConnectionErrorEvent(
-                error: "Subscription failed on \(self.channel): \(event.error.localizedDescription)"
-            ))
-        }
+        service?.handleSubscriptionError(roomId: roomId, channel: channel, error: event.error)
     }
 
     func onJoin(_ sub: CentrifugeSubscription, _ event: CentrifugeJoinEvent) {

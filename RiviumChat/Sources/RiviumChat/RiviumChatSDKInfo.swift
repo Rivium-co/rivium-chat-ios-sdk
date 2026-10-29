@@ -8,7 +8,7 @@ public enum RiviumChatSDKInfo {
 
     /// Version of this SDK. Must match `RiviumChat.podspec`; a unit test
     /// fails when they drift.
-    public static let version = "0.1.4"
+    public static let version = "0.2.0"
 
     /// Header that carries the SDK identity.
     static let headerName = "X-Rivium-SDK"

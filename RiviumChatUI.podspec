@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'RiviumChatUI'
-  s.version          = '0.1.0'
+  s.version          = '0.2.0'
   s.summary          = 'Pre-built UI components for RiviumChat iOS SDK'
   s.description      = <<-DESC
     RiviumChatUI provides ready-to-use SwiftUI components for chat applications
@@ -20,7 +20,7 @@ Pod::Spec.new do |s|
 
   s.source_files = 'RiviumChatUI/Sources/**/*.swift'
 
-  s.dependency 'RiviumChat', '~> 0.1'
+  s.dependency 'RiviumChat', '~> 0.2'
   s.dependency 'SDWebImageSwiftUI', '~> 3.0'
 
   s.frameworks = 'SwiftUI'

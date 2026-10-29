@@ -68,14 +68,14 @@ struct ContentView: View {
     private func login(user: DemoUser) {
         currentUser = user
         let config = RiviumChatConfig(
-            apiKey: "rv_live_64e0ada5eeb66e3adf6136337802a5a34713ce4966372854",
+            apiKey: ExampleConfig.apiKey,
             userId: user.id,
             userInfo: ["displayName": user.name]
         )
         print("[RiviumChat] Creating client for user: \(user.id) (\(user.name))")
         let client = RiviumChatClient(config: config)
         riviumChatClient = client
-        let pushConfig = RiviumPushConfig(apiKey: "rv_live_64e0ada5eeb66e3adf6136337802a5a34713ce4966372854", showNotificationInForeground: true)
+        let pushConfig = RiviumPushConfig(apiKey: ExampleConfig.apiKey, showNotificationInForeground: true)
         RiviumPush.shared.initialize(config: pushConfig)
         RiviumPush.shared.register(userId: user.id, metadata: ["displayName": user.name, "role": user.role.rawValue])
         Task {
@@ -97,4 +97,12 @@ struct ContentView: View {
         selectedOrder = nil
         navigationPath = NavigationPath()
     }
+}
+
+/// Settings for running this example.
+enum ExampleConfig {
+    /// Your project's public key (`rv_live_...`) from Rivium Console, used by
+    /// both Rivium Chat and Rivium Push. Replace the placeholder before
+    /// running, and do not commit your real key.
+    static let apiKey = "rv_live_your_api_key"
 }

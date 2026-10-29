@@ -14,6 +14,8 @@ public struct ChatMessageBubble: View {
     var onReactionTap: ((String) -> Void)? = nil
     var onLongPress: (() -> Void)? = nil
     var onImageTap: ((String) -> Void)? = nil
+    /// Name shown above the quoted message of a reply. Hidden when nil.
+    var replySenderName: String? = nil
 
     @Environment(\.riviumChatColors) private var colors
     @Environment(\.riviumChatDimensions) private var dimensions
@@ -28,8 +30,10 @@ public struct ChatMessageBubble: View {
         onRetry: (() -> Void)? = nil,
         onReactionTap: ((String) -> Void)? = nil,
         onLongPress: (() -> Void)? = nil,
-        onImageTap: ((String) -> Void)? = nil
+        onImageTap: ((String) -> Void)? = nil,
+        replySenderName: String? = nil
     ) {
+        self.replySenderName = replySenderName
         self.message = message
         self.isMe = isMe
         self.isRead = isRead
@@ -81,7 +85,7 @@ public struct ChatMessageBubble: View {
             VStack(alignment: isMe ? .trailing : .leading, spacing: 4) {
                 // Reply preview
                 if let replyTo = message.replyTo {
-                    ReplyPreview(message: replyTo, isMe: isMe)
+                    ReplyPreview(message: replyTo, senderName: replySenderName, isMe: isMe)
                 }
 
                 // Message bubble
@@ -174,6 +178,12 @@ public struct ChatMessageBubble: View {
 
             // Timestamp and status row
             HStack(spacing: 4) {
+                if message.isPinned {
+                    Image(systemName: "pin.fill")
+                        .font(.caption2)
+                        .foregroundColor(isMe ? colors.myMessageText.opacity(0.7) : colors.timestampText)
+                        .accessibilityLabel("Pinned")
+                }
                 if message.isEdited {
                     Text("edited")
                         .font(.caption2)
@@ -202,12 +212,23 @@ public struct ChatMessageBubble: View {
                     .font(.caption)
                 if let onRetry = onRetry {
                     Button(action: onRetry) {
-                        Image(systemName: "arrow.clockwise")
+                        Label("Retry", systemImage: "arrow.clockwise")
+                            .labelStyle(.titleAndIcon)
+                            .font(.caption.weight(.semibold))
                             .foregroundColor(colors.failedMessage)
-                            .font(.caption)
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Message not sent. Retry")
                 }
             }
+        } else if QueuedMessageMerge.isQueuedOffline(message) {
+            // Queued by the SDK's offline outbox: sent when the network is back.
+            HStack(spacing: 2) {
+                Image(systemName: "clock")
+                Text(QueuedMessageMerge.waitingForNetwork)
+            }
+            .foregroundColor(colors.myMessageText.opacity(0.7))
+            .font(.caption2)
         } else if message.isPending {
             Image(systemName: "clock")
                 .foregroundColor(colors.myMessageText.opacity(0.7))
@@ -251,6 +272,8 @@ public struct ChatMessageBubble: View {
 
 struct ReplyPreview: View {
     let message: Message
+    /// The quoted sender's display name; their user id when nil.
+    var senderName: String? = nil
     let isMe: Bool
 
     @Environment(\.riviumChatColors) private var colors
@@ -262,7 +285,7 @@ struct ReplyPreview: View {
                 .frame(width: 3)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(message.senderUserId)
+                Text(senderName ?? message.senderUserId)
                     .font(.caption)
                     .fontWeight(.medium)
                     .foregroundColor(isMe ? colors.myMessageBubble : Color.accentColor)

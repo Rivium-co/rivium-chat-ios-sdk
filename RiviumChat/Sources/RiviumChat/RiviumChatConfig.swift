@@ -62,12 +62,30 @@ public struct RiviumChatConfig {
     /// project can disable in Rivium Console.
     public let tokenProvider: ChatTokenProvider?
 
+    /// Off by default: `sendMessage` without network throws, as before. When
+    /// on, a message that cannot be sent because of the network (no network,
+    /// timeout, server busy) is kept and sent when the connection is back, in
+    /// order and never twice; `sendMessage` returns it as a pending message
+    /// (`isPending == true`). See `onMessageSent` and `onMessageFailed`.
+    public let queueOfflineMessages: Bool
+
+    /// With ``queueOfflineMessages``: keep the queue in a file in Application
+    /// Support so it survives an app restart (otherwise in memory).
+    public let persistOfflineMessages: Bool
+
+    /// Optional. Your own storage for the queue; wins over
+    /// ``persistOfflineMessages``.
+    public let outboxStore: OutboxStore?
+
     public init(
         apiKey: String,
         userId: String,
         userInfo: [String: String]? = nil,
         fileUploader: FileUploader? = nil,
-        tokenProvider: ChatTokenProvider? = nil
+        tokenProvider: ChatTokenProvider? = nil,
+        queueOfflineMessages: Bool = false,
+        persistOfflineMessages: Bool = false,
+        outboxStore: OutboxStore? = nil
     ) {
         precondition(!apiKey.isEmpty, "API key cannot be empty")
         precondition(!userId.isEmpty, "User ID cannot be empty")
@@ -77,5 +95,8 @@ public struct RiviumChatConfig {
         self.userInfo = userInfo
         self.fileUploader = fileUploader
         self.tokenProvider = tokenProvider
+        self.queueOfflineMessages = queueOfflineMessages
+        self.persistOfflineMessages = persistOfflineMessages
+        self.outboxStore = outboxStore
     }
 }

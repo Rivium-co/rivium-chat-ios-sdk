@@ -33,7 +33,7 @@ Or add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/Rivium-co/rivium-chat-ios-sdk", from: "0.1.0"),
+    .package(url: "https://github.com/Rivium-co/rivium-chat-ios-sdk", from: "0.2.0"),
 ]
 ```
 
@@ -54,8 +54,8 @@ Then add the libraries to your target:
 Add to your `Podfile`:
 
 ```ruby
-pod 'RiviumChat', '~> 0.1'
-pod 'RiviumChatUI', '~> 0.1'
+pod 'RiviumChat', '~> 0.2'
+pod 'RiviumChatUI', '~> 0.2'
 ```
 
 Then run:
@@ -161,6 +161,53 @@ client.onReadReceipt.sink { event in
 try await client.markAsRead(room.id)
 ```
 
+### 6. Search Messages
+
+```swift
+let result = try await client.searchMessagesWithTotal(room.id, query: "Order #1001")
+print("\(result.total) matches")
+for message in result.messages { print(message.content) }
+```
+
+`total` counts every match, not only this page; `hasMore` says whether another page follows (pass `limit` and `offset` to page). `searchMessages()` still returns only the list.
+
+## Sending while offline
+
+By default `sendMessage` throws when there is no network. Turn on the offline queue to keep such messages and send them when the connection is back, in the order written and never twice:
+
+```swift
+let client = RiviumChatClient(config: RiviumChatConfig(
+    apiKey: "rv_live_demo_app",
+    userId: "user-42",
+    queueOfflineMessages: true
+))
+
+let message = try await client.sendMessage(roomId, content: "Order #1001 is ready")
+if message.isPending {
+    // Queued: shown as waiting, sent when the network is back
+}
+
+client.onMessageSent
+    .sink { event in
+        // event.localId (the pending id) -> event.message (the stored message)
+    }
+    .store(in: &cancellables)
+
+client.onMessageFailed
+    .sink { event in
+        // event.reason: "expired" (waited 24 hours) or "rejected" (refused by the server)
+    }
+    .store(in: &cancellables)
+```
+
+- Only network failures are queued (no network, timeout, a failing `tokenProvider`, 5xx, 408, 429). Errors the server answers, such as not a member of the room or an invalid message, still throw.
+- A queued message has `isPending == true`, the id `local_<clientMessageId>` and `clientMessageId`. The stored message (and its live `onMessage` event) carries the same `clientMessageId`, so you can replace the pending copy.
+- The queue is sent when the realtime connection comes back, and with `retryPendingMessages()`. `getPendingMessages(roomId:)` lists what waits; `cancelPendingMessage(localId)` removes one (a message already being sent cannot be recalled). Queued messages of another user on the same device are never sent.
+- Attachments must already be uploaded (URLs); uploads themselves are not queued.
+- The queue lives in memory. To keep it across app restarts, add `persistOfflineMessages: true` (a file in Application Support), or pass your own `outboxStore`.
+
+Call `client.clearPendingMessages()` on sign-out when another user may sign in on the device. The UI kit's chat screen shows queued messages as "Waiting for network…".
+
 ## Packages
 
 | Package | Description | Min iOS |
@@ -195,6 +242,8 @@ The `ios_ecommerce/` directory contains a complete e-commerce chat example demon
 - Unread message badges
 - Message pagination
 - Reply to messages
+
+To run it, open `ios_ecommerce/RiviumChatEcommerce/RiviumChatEcommerceApp.swift` and replace the placeholder in `ExampleConfig.apiKey` with your project's public key (`rv_live_...`) from [Rivium Console](https://console.rivium.co). Keep your real key out of version control.
 
 ## Push Notifications
 

@@ -147,3 +147,45 @@ public struct AuthErrorEvent {
         self.error = error
     }
 }
+
+/// A message queued while offline was stored by the server
+/// (only with ``RiviumChatConfig/queueOfflineMessages``).
+///
+/// `localId` is the pending message's id (`local_<clientMessageId>`);
+/// `message` is the stored message. The live message event for it still
+/// arrives and carries the same `clientMessageId`.
+public struct MessageSentEvent {
+    public let localId: String
+    public let clientMessageId: String
+    public let message: Message
+
+    public init(localId: String, clientMessageId: String, message: Message) {
+        self.localId = localId
+        self.clientMessageId = clientMessageId
+        self.message = message
+    }
+}
+
+/// A message queued while offline left the queue without being stored
+/// (only with ``RiviumChatConfig/queueOfflineMessages``).
+///
+/// `reason` is ``reasonExpired`` (it waited more than 24 hours) or
+/// ``reasonRejected`` (the server refused it, e.g. not a member any more).
+public struct MessageFailedEvent: Equatable {
+    public static let reasonExpired = "expired"
+    public static let reasonRejected = "rejected"
+
+    public let localId: String
+    public let clientMessageId: String
+    public let roomId: String
+    public let error: String
+    public let reason: String
+
+    public init(localId: String, clientMessageId: String, roomId: String, error: String, reason: String) {
+        self.localId = localId
+        self.clientMessageId = clientMessageId
+        self.roomId = roomId
+        self.error = error
+        self.reason = reason
+    }
+}

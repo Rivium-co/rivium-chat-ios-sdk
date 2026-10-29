@@ -14,6 +14,8 @@ public struct ChatInputField: View {
     var onVoiceRecordStart: (() -> Void)? = nil
     var isEnabled: Bool = true
     var placeholder: String = "Type a message..."
+    /// Name shown in "Replying to …"; the sender's user id when nil.
+    var replyingToName: String? = nil
 
     @Environment(\.riviumChatColors) private var colors
     @Environment(\.riviumChatDimensions) private var dimensions
@@ -30,8 +32,10 @@ public struct ChatInputField: View {
         onEmojiTap: (() -> Void)? = nil,
         onVoiceRecordStart: (() -> Void)? = nil,
         isEnabled: Bool = true,
-        placeholder: String = "Type a message..."
+        placeholder: String = "Type a message...",
+        replyingToName: String? = nil
     ) {
+        self.replyingToName = replyingToName
         self._text = text
         self.onSend = onSend
         self.onTyping = onTyping
@@ -51,6 +55,7 @@ public struct ChatInputField: View {
             if let replyingTo = replyingTo {
                 ReplyInputPreview(
                     message: replyingTo,
+                    senderName: replyingToName ?? replyingTo.senderUserId,
                     onClose: { onCancelReply?() }
                 )
             }

@@ -25,8 +25,7 @@ public class ApiService {
         configuration.timeoutIntervalForResource = 30
         self.session = URLSession(configuration: configuration)
 
-        self.decoder = JSONDecoder()
-        self.decoder.dateDecodingStrategy = .iso8601
+        self.decoder = RiviumChatJSON.decoder()
 
         self.encoder = JSONEncoder()
         self.encoder.dateEncodingStrategy = .iso8601
@@ -52,7 +51,7 @@ public class ApiService {
             body["metadata"] = metadata
         }
 
-        let data = try await request(method: "POST", path: "/api/v1/rooms", body: body)
+        let data = try await request(method: "POST", path: try ApiRoute.path(["rooms"]), body: body)
         return try decoder.decode(Room.self, from: data)
     }
 
@@ -78,7 +77,7 @@ public class ApiService {
 
         let data = try await request(
             method: "POST",
-            path: "/api/v1/rooms/find-or-create",
+            path: try ApiRoute.path(["rooms", "find-or-create"]),
             body: body
         )
         // API returns { room: {...}, created: bool }
@@ -92,20 +91,19 @@ public class ApiService {
 
     /// Gets a room by its external ID.
     public func getRoomByExternalId(_ externalId: String) async throws -> Room {
-        let encodedId = externalId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? externalId
-        let data = try await request(method: "GET", path: "/api/v1/rooms/by-external-id/\(encodedId)")
+        let data = try await request(method: "GET", path: try ApiRoute.path(["rooms", "by-external-id", externalId]))
         return try decoder.decode(Room.self, from: data)
     }
 
     /// List all rooms for a user.
     public func listRooms(_ userId: String) async throws -> [Room] {
-        let data = try await request(method: "GET", path: "/api/v1/rooms?userId=\(userId)")
+        let data = try await request(method: "GET", path: try ApiRoute.path(["rooms"], query: [("userId", userId)]))
         return try decoder.decode([Room].self, from: data)
     }
 
     /// Get a room by ID.
     public func getRoom(_ roomId: String) async throws -> Room {
-        let data = try await request(method: "GET", path: "/api/v1/rooms/\(roomId)")
+        let data = try await request(method: "GET", path: try ApiRoute.path(["rooms", roomId]))
         return try decoder.decode(Room.self, from: data)
     }
 
@@ -128,7 +126,7 @@ public class ApiService {
             body["locale"] = locale
         }
 
-        let data = try await request(method: "POST", path: "/api/v1/rooms/\(roomId)/participants", body: body)
+        let data = try await request(method: "POST", path: try ApiRoute.path(["rooms", roomId, "participants"]), body: body)
         return try decoder.decode(Participant.self, from: data)
     }
 
@@ -143,6 +141,27 @@ public class ApiService {
         attachments: [Attachment]? = nil,
         metadata: [String: Any]? = nil,
         replyToId: String? = nil
+    ) async throws -> Message {
+        try await sendMessage(
+            roomId, senderUserId: senderUserId, content: content, type: type,
+            attachments: attachments, metadata: metadata, replyToId: replyToId,
+            clientMessageId: nil, markTokenFailures: false
+        )
+    }
+
+    /// Sends with an optional `clientMessageId` (offline outbox). With
+    /// `markTokenFailures`, a failing tokenProvider is thrown as
+    /// ``TokenProviderFailure`` so the outbox can tell it from a refusal.
+    func sendMessage(
+        _ roomId: String,
+        senderUserId: String,
+        content: String,
+        type: MessageType,
+        attachments: [Attachment]?,
+        metadata: [String: Any]?,
+        replyToId: String?,
+        clientMessageId: String?,
+        markTokenFailures: Bool
     ) async throws -> Message {
         var body: [String: Any] = [
             "senderUserId": senderUserId,
@@ -164,11 +183,15 @@ public class ApiService {
         if let replyToId = replyToId {
             body["replyToId"] = replyToId
         }
+        if let clientMessageId {
+            body["clientMessageId"] = clientMessageId
+        }
 
         let data = try await request(
             method: "POST",
-            path: "/api/v1/rooms/\(roomId)/messages",
-            body: body
+            path: try ApiRoute.path(["rooms", roomId, "messages"]),
+            body: body,
+            markTokenFailures: markTokenFailures
         )
         return try decoder.decode(Message.self, from: data)
     }
@@ -180,10 +203,10 @@ public class ApiService {
         limit: Int = 50,
         before: String? = nil
     ) async throws -> PaginatedMessages {
-        var path = "/api/v1/rooms/\(roomId)/messages?userId=\(userId)&limit=\(limit)"
-        if let before = before {
-            path += "&before=\(before)"
-        }
+        let path = try ApiRoute.path(
+            ["rooms", roomId, "messages"],
+            query: [("userId", userId), ("limit", String(limit)), ("before", before)]
+        )
 
         let data = try await request(method: "GET", path: path)
         return try decoder.decode(PaginatedMessages.self, from: data)
@@ -194,7 +217,7 @@ public class ApiService {
         let body: [String: Any] = ["userId": userId]
         _ = try await request(
             method: "POST",
-            path: "/api/v1/rooms/\(roomId)/read",
+            path: try ApiRoute.path(["rooms", roomId, "read"]),
             body: body
         )
     }
@@ -203,7 +226,7 @@ public class ApiService {
     public func deleteMessage(_ messageId: String, _ userId: String) async throws {
         _ = try await request(
             method: "DELETE",
-            path: "/api/v1/messages/\(messageId)?userId=\(userId)"
+            path: try ApiRoute.path(["messages", messageId], query: [("userId", userId)])
         )
     }
 
@@ -219,7 +242,7 @@ public class ApiService {
         ]
         let data = try await request(
             method: "PUT",
-            path: "/api/v1/messages/\(messageId)",
+            path: try ApiRoute.path(["messages", messageId]),
             body: body
         )
         return try decoder.decode(Message.self, from: data)
@@ -233,10 +256,49 @@ public class ApiService {
         limit: Int = 20,
         offset: Int = 0
     ) async throws -> [Message] {
-        let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-        let path = "/api/v1/rooms/\(roomId)/messages/search?userId=\(userId)&q=\(encodedQuery)&limit=\(limit)&offset=\(offset)"
+        try await searchMessagesWithTotal(roomId, userId: userId, query: query, limit: limit, offset: offset).messages
+    }
+
+    /// Search messages in a room and report how many match in total.
+    public func searchMessagesWithTotal(
+        _ roomId: String,
+        userId: String,
+        query: String,
+        limit: Int = 20,
+        offset: Int = 0
+    ) async throws -> SearchResult {
+        let path = try ApiRoute.path(
+            ["rooms", roomId, "messages", "search"],
+            query: [("userId", userId), ("q", query), ("limit", String(limit)), ("offset", String(offset))]
+        )
         let data = try await request(method: "GET", path: path)
-        return try decoder.decode([Message].self, from: data)
+        return try decodeSearchResult(data, offset: offset)
+    }
+
+    /// Search answers `{ messages, total }`; a bare array is accepted too.
+    func decodeSearchResponse(_ data: Data) throws -> [Message] {
+        try decodeSearchResult(data, offset: 0).messages
+    }
+
+    /// The search answer with its total; a bare array counts its own length.
+    func decodeSearchResult(_ data: Data, offset: Int) throws -> SearchResult {
+        let firstByte = data.first { !" \t\r\n".utf8.contains($0) }
+        let messages: [Message]
+        let total: Int
+        if firstByte == UInt8(ascii: "[") {
+            messages = try decoder.decode([Message].self, from: data)
+            total = messages.count
+        } else {
+            let page = try decoder.decode(SearchPage.self, from: data)
+            messages = page.messages
+            total = page.total ?? messages.count
+        }
+        return SearchResult(messages: messages, total: total, hasMore: offset + messages.count < total)
+    }
+
+    private struct SearchPage: Decodable {
+        let messages: [Message]
+        let total: Int?
     }
 
     // MARK: - Reaction Operations
@@ -253,7 +315,7 @@ public class ApiService {
         ]
         let data = try await request(
             method: "POST",
-            path: "/api/v1/messages/\(messageId)/reactions",
+            path: try ApiRoute.path(["messages", messageId, "reactions"]),
             body: body
         )
         return try decoder.decode(Reaction.self, from: data)
@@ -271,14 +333,14 @@ public class ApiService {
         ]
         _ = try await request(
             method: "DELETE",
-            path: "/api/v1/messages/\(messageId)/reactions",
+            path: try ApiRoute.path(["messages", messageId, "reactions"]),
             body: body
         )
     }
 
     /// Gets all reactions for a message.
     public func getReactions(_ messageId: String) async throws -> [Reaction] {
-        let data = try await request(method: "GET", path: "/api/v1/messages/\(messageId)/reactions")
+        let data = try await request(method: "GET", path: try ApiRoute.path(["messages", messageId, "reactions"]))
         return try decoder.decode([Reaction].self, from: data)
     }
 
@@ -289,7 +351,7 @@ public class ApiService {
         let body: [String: Any] = ["userId": userId]
         let data = try await request(
             method: "POST",
-            path: "/api/v1/messages/\(messageId)/pin",
+            path: try ApiRoute.path(["messages", messageId, "pin"]),
             body: body
         )
         return try decoder.decode(Message.self, from: data)
@@ -300,14 +362,14 @@ public class ApiService {
         let body: [String: Any] = ["userId": userId]
         _ = try await request(
             method: "DELETE",
-            path: "/api/v1/messages/\(messageId)/pin",
+            path: try ApiRoute.path(["messages", messageId, "pin"]),
             body: body
         )
     }
 
     /// Get all pinned messages in a room.
     public func getPinnedMessages(_ roomId: String) async throws -> [Message] {
-        let data = try await request(method: "GET", path: "/api/v1/rooms/\(roomId)/pinned")
+        let data = try await request(method: "GET", path: try ApiRoute.path(["rooms", roomId, "pinned"]))
         return try decoder.decode([Message].self, from: data)
     }
 
@@ -315,7 +377,7 @@ public class ApiService {
 
     /// Get unread summary for all rooms.
     public func getUnreadSummary(_ userId: String) async throws -> UnreadSummary {
-        let data = try await request(method: "GET", path: "/api/v1/rooms/unread-summary?userId=\(userId)")
+        let data = try await request(method: "GET", path: try ApiRoute.path(["rooms", "unread-summary"], query: [("userId", userId)]))
         return try decoder.decode(UnreadSummary.self, from: data)
     }
 
@@ -328,9 +390,23 @@ public class ApiService {
     ) async throws -> [Message] {
         let data = try await request(
             method: "GET",
-            path: "/api/v1/rooms/\(roomId)/mentions?userId=\(userId)&limit=\(limit)&offset=\(offset)"
+            path: try ApiRoute.path(
+                ["rooms", roomId, "mentions"],
+                query: [("userId", userId), ("limit", String(limit)), ("offset", String(offset))]
+            )
         )
-        return try decoder.decode([Message].self, from: data)
+        return try decodeMentionsResponse(data)
+    }
+
+    /// Mentions answer a list of mention records, `{ id, messageId,
+    /// mentionedUserId, roomId, createdAt, message }`; the mentioning message
+    /// is returned. A record without its message is skipped.
+    func decodeMentionsResponse(_ data: Data) throws -> [Message] {
+        try decoder.decode([MentionRecord].self, from: data).compactMap(\.message)
+    }
+
+    private struct MentionRecord: Decodable {
+        let message: Message?
     }
 
     /// Gets a Centrifugo connection token.
@@ -344,7 +420,7 @@ public class ApiService {
         }
         let data = try await request(
             method: "POST",
-            path: "/api/v1/centrifugo/token",
+            path: try ApiRoute.path(["centrifugo", "token"]),
             body: body
         )
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -362,8 +438,11 @@ public class ApiService {
     // MARK: - Private Helpers
 
     /// A user token for the realtime connection, when a tokenProvider is set.
+    /// A failing provider is reported as `token_provider_failed`, the same way
+    /// the REST calls report it, and then rethrown.
     func userTokenOrNil() async throws -> String? {
-        try await tokens?.get()
+        guard let tokens else { return nil }
+        return try await userToken { try await tokens.get() }
     }
 
     /// Forgets the cached user token (e.g. on logout).
@@ -381,7 +460,21 @@ public class ApiService {
         }
     }
 
-    private func request(method: String, path: String, body: [String: Any]? = nil) async throws -> Data {
+    private func request(
+        method: String,
+        path: String,
+        body: [String: Any]? = nil,
+        markTokenFailures: Bool = false
+    ) async throws -> Data {
+        func userToken(_ get: () async throws -> String) async throws -> String {
+            do {
+                return try await self.userToken(get)
+            } catch {
+                if markTokenFailures { throw TokenProviderFailure(underlying: error) }
+                throw error
+            }
+        }
+
         guard let url = URL(string: RiviumChatConfig.baseUrl + path) else {
             throw RiviumChatError.invalidURL
         }
@@ -440,6 +533,20 @@ public class ApiService {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let message = json["message"] as? String else { return "Authentication failed" }
         return message
+    }
+}
+
+/// A failing tokenProvider, as the offline outbox sees it (never reaches the app).
+struct TokenProviderFailure: Error {
+    let underlying: Error
+}
+
+/// Thrown by a ``RiviumChatClient`` call made after ``RiviumChatClient/dispose()``.
+public struct RiviumChatClientDisposedError: Error, LocalizedError {
+    public init() {}
+
+    public var errorDescription: String? {
+        "RiviumChatClient has been disposed"
     }
 }
 

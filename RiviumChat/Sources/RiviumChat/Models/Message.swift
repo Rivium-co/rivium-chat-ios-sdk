@@ -17,7 +17,8 @@ public final class Message: Codable, Equatable, Hashable {
         lhs.pinnedAt == rhs.pinnedAt &&
         lhs.pinnedBy == rhs.pinnedBy &&
         lhs.isPending == rhs.isPending &&
-        lhs.isFailed == rhs.isFailed
+        lhs.isFailed == rhs.isFailed &&
+        lhs.clientMessageId == rhs.clientMessageId
     }
 
     public func hash(into hasher: inout Hasher) {
@@ -45,6 +46,9 @@ public final class Message: Codable, Equatable, Hashable {
     // Local state flags (not persisted)
     public let isPending: Bool
     public let isFailed: Bool
+    /// The id the sending app gave the message (sent by the SDK when
+    /// `queueOfflineMessages` is on); matches a pending copy to the stored one.
+    public let clientMessageId: String?
 
     public init(
         id: String,
@@ -66,7 +70,8 @@ public final class Message: Codable, Equatable, Hashable {
         pinnedBy: String? = nil,
         reactions: [Reaction]? = nil,
         isPending: Bool = false,
-        isFailed: Bool = false
+        isFailed: Bool = false,
+        clientMessageId: String? = nil
     ) {
         self.id = id
         self.roomId = roomId
@@ -88,13 +93,14 @@ public final class Message: Codable, Equatable, Hashable {
         self.reactions = reactions
         self.isPending = isPending
         self.isFailed = isFailed
+        self.clientMessageId = clientMessageId
     }
 
     // Custom encoding/decoding for recursive replyTo
     private enum CodingKeys: String, CodingKey {
         case id, roomId, senderUserId, content, type, attachments, metadata
         case replyToId, replyTo, isDeleted, createdAt, isEdited, editedAt, editHistory
-        case isPinned, pinnedAt, pinnedBy, reactions, isPending, isFailed
+        case isPinned, pinnedAt, pinnedBy, reactions, isPending, isFailed, clientMessageId
     }
 
     public init(from decoder: Decoder) throws {
@@ -119,6 +125,7 @@ public final class Message: Codable, Equatable, Hashable {
         reactions = try container.decodeIfPresent([Reaction].self, forKey: .reactions)
         isPending = try container.decodeIfPresent(Bool.self, forKey: .isPending) ?? false
         isFailed = try container.decodeIfPresent(Bool.self, forKey: .isFailed) ?? false
+        clientMessageId = try container.decodeIfPresent(String.self, forKey: .clientMessageId)
     }
 }
 
